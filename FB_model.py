@@ -10,8 +10,30 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import pandas as pd
+import json
 
 st.set_page_config(layout="wide", page_title="Fermi Bubble Explorer")
+
+# --- INITIALIZE DEFAULT PARAMETERS IN SESSION STATE ---
+# This allows us to overwrite them dynamically via file import
+default_params = {
+    'a': 6.0, 'b': 4.0, 'c': 4.0, 'z0': 5.0, 'az_angle': 0.0,
+    'sun_x': -8.275, 'sun_y': 0.0, 'sun_z': 0.0,
+    'N': 5000,
+    'distribution_mode': "Volume Filling",
+    'kinematic_model': "Radial Outflow",
+    'wind_profile': "Constant Velocity Wind",
+    'v_r_const': 500.0,
+    'm_slope': 125.0,
+    'v_r_max': 500.0,
+    'v_c': 240.0,
+    'min_lat': 0.0,
+    'max_lat': 90.0
+}
+
+for k, v in default_params.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 # Initialize Session State for locked calculations
 if 'calc_state' not in st.session_state:
@@ -24,27 +46,59 @@ if 'calc_state' not in st.session_state:
         'sun_pos': np.array([-8.275, 0.0, 0.0])
     }
 
+# --- SIDEBAR: CONFIG MANAGER ---
+st.sidebar.title("⚙️ Config Manager")
+
+# Import Config
+uploaded_file = st.sidebar.file_uploader("Import Parameters (.json)", type=["json", "txt"])
+if uploaded_file is not None:
+    file_content = uploaded_file.getvalue()
+    # Prevent infinite reruns by checking if content changed
+    if st.session_state.get('last_uploaded_content') != file_content:
+        try:
+            loaded_params = json.loads(file_content.decode("utf-8"))
+            for k, v in loaded_params.items():
+                if k in default_params:
+                    st.session_state[k] = v
+            st.session_state['last_uploaded_content'] = file_content
+            st.rerun()
+        except Exception as e:
+            st.sidebar.error(f"Error loading file: {e}")
+
+# Export Config
+current_params = {k: st.session_state[k] for k in default_params.keys()}
+json_str = json.dumps(current_params, indent=4)
+st.sidebar.download_button(
+    label="Export Current Config",
+    data=json_str,
+    file_name="wind_model_parameters.json",
+    mime="application/json",
+    use_container_width=True
+)
+
+st.sidebar.divider()
+
 # --- SIDEBAR: GLOBAL SETTINGS ---
 st.sidebar.title("Simulation Mode")
 mode = st.sidebar.radio("Select Mode:", ["1. Wind Simulator", "2. LOS Explorer"], index=0)
 
 st.sidebar.divider()
 
-with st.sidebar.expander("Bubble Geometry"):
-    a = st.number_input("Vertical Semi-axis (a) [kpc]", value=6.0)
-    b = st.number_input("Lateral Semi-axis (b) [kpc]", value=4.0)
-    c = st.number_input("Lateral Semi-axis (c) [kpc]", value=4.0)
-    z0 = st.number_input("Center Offset (z0) [kpc]", value=5.0)
-    az_angle = st.number_input("Azimuthal Rotation [deg]", value=0.0, help="Rotates the bubble around the vertical Z-axis.")
+with st.sidebar.expander("Bubble Geometry", expanded=True):
+    # Added keys to bind inputs to session state
+    a = st.number_input("Vertical Semi-axis (a) [kpc]", key='a')
+    b = st.number_input("Lateral Semi-axis (b) [kpc]", key='b')
+    c = st.number_input("Lateral Semi-axis (c) [kpc]", key='c')
+    z0 = st.number_input("Center Offset (z0) [kpc]", key='z0')
+    az_angle = st.number_input("Azimuthal Rotation [deg]", key='az_angle', help="Rotates the bubble around the vertical Z-axis.")
 
 st.sidebar.divider()
 
-with st.sidebar.expander("Observer (Sun)"):
-    sun_pos = np.array([
-        st.number_input("Sun X [kpc]", value=-8.275, format="%.3f"),
-        st.number_input("Sun Y [kpc]", value=0.0),
-        st.number_input("Sun Z [kpc]", value=0.0)
-    ])
+with st.sidebar.expander("Observer (Sun)", expanded=True):
+    sun_x = st.number_input("Sun X [kpc]", key='sun_x', format="%.3f")
+    sun_y = st.number_input("Sun Y [kpc]", key='sun_y', format="%.3f")
+    sun_z = st.number_input("Sun Z [kpc]", key='sun_z', format="%.3f")
+    sun_pos = np.array([sun_x, sun_y, sun_z])
 
 # --- SHARED MATH FUNCTIONS ---
 def get_ellipsoid_mesh(z_center, a_val, b_val, c_val, sign=1, angle_deg=0.0):
@@ -68,25 +122,29 @@ def get_ellipsoid_mesh(z_center, a_val, b_val, c_val, sign=1, angle_deg=0.0):
 if mode == "1. Wind Simulator":
     st.sidebar.divider()
     st.sidebar.header("Wind Kinematics")
-    N = st.sidebar.number_input("Number of Particles/Clouds (N)", min_value=1, max_value=200000, value=5000, step=500)
+    N = st.sidebar.number_input("Number of Particles/Clouds (N)", min_value=1, max_value=200000, step=500, key='N')
     
-    distribution_mode = st.sidebar.radio("Particle Distribution", ["Volume Filling", "Edge Confined"])
-    kinematic_model = st.sidebar.radio("Flow Geometry", ["Radial Outflow", "Ellipsoidal Streamlines"])
-    wind_profile = st.sidebar.radio("Velocity Profile", ["Constant Velocity Wind", "Accelerating Wind"])
+    distribution_mode = st.sidebar.radio("Particle Distribution", ["Volume Filling", "Edge Confined"], key='distribution_mode')
+    kinematic_model = st.sidebar.radio("Flow Geometry", ["Radial Outflow", "Ellipsoidal Streamlines"], key='kinematic_model')
+    wind_profile = st.sidebar.radio("Velocity Profile", ["Constant Velocity Wind", "Accelerating Wind"], key='wind_profile')
     
+    # Track active variables safely without breaking Streamlit keys
     if wind_profile == "Constant Velocity Wind":
-        v_r_const = st.sidebar.number_input("Constant Radial Velocity [km/s]", value=500.0)
-        m_slope = 0.0
-        v_r_max = 0.0
+        v_r_const_val = st.sidebar.number_input("Constant Radial Velocity [km/s]", key='v_r_const')
+        calc_m_slope = 0.0
+        calc_v_r_max = 0.0
+        calc_v_r_const = v_r_const_val
     else:
-        v_r_const = 0.0
-        m_slope = st.sidebar.number_input("Acceleration Slope [(km/s)/kpc]", value=125.0)
-        v_r_max = st.sidebar.number_input("Maximum Velocity [km/s]", value=500.0)
+        calc_v_r_const = 0.0
+        m_slope_val = st.sidebar.number_input("Acceleration Slope [(km/s)/kpc]", key='m_slope')
+        v_r_max_val = st.sidebar.number_input("Maximum Velocity [km/s]", key='v_r_max')
+        calc_m_slope = m_slope_val
+        calc_v_r_max = v_r_max_val
     
-    v_c = st.sidebar.number_input("Sun Circular Velocity [km/s]", value=240.0, help="Used for LSR conversion")
+    v_c = st.sidebar.number_input("Sun Circular Velocity [km/s]", key='v_c', help="Used for LSR conversion")
     
-    min_lat = st.sidebar.number_input("Minimum Latitude |b| [deg]", min_value=0.0, max_value=90.0, value=0.0)
-    max_lat = st.sidebar.number_input("Maximum Latitude |b| [deg]", min_value=0.0, max_value=90.0, value=90.0)
+    min_lat = st.sidebar.number_input("Minimum Latitude |b| [deg]", min_value=0.0, max_value=90.0, key='min_lat')
+    max_lat = st.sidebar.number_input("Maximum Latitude |b| [deg]", min_value=0.0, max_value=90.0, key='max_lat')
 
     if min_lat > max_lat:
         st.sidebar.error("Minimum latitude cannot be greater than Maximum latitude.")
@@ -237,7 +295,7 @@ if mode == "1. Wind Simulator":
     if st.sidebar.button("Calculate model", type="primary"):
         if min_lat <= max_lat:
             with st.spinner("Generating Wind Particles and Kinematics..."):
-                df_wind = generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode, kinematic_model, az_angle)
+                df_wind = generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, calc_v_r_const, calc_m_slope, calc_v_r_max, min_lat, max_lat, distribution_mode, kinematic_model, az_angle)
                 sample_size = min(N, 2000)
                 
                 st.session_state['calc_state'] = {
