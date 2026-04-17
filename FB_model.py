@@ -63,7 +63,7 @@ if mode == "1. Radial Wind Simulator":
     st.sidebar.header("Wind Kinematics")
     N = st.sidebar.number_input("Number of Particles/Clouds (N)", min_value=1, max_value=20000, value=5000, step=500)
     
-    wind_profile = st.sidebar.radio("Velocity Profile", ["Constant Velocity", "Accelerated Wind"])
+    wind_profile = st.sidebar.radio("Velocity Profile", ["Constant Velocity Wind", "Accelerating Wind"])
     
     if wind_profile == "Constant Velocity":
         v_r_const = st.sidebar.number_input("Constant Radial Velocity (Vr) [km/s]", value=500.0)
