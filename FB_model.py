@@ -26,7 +26,7 @@ if 'calc_state' not in st.session_state:
 
 # --- SIDEBAR: GLOBAL SETTINGS ---
 st.sidebar.title("Simulation Mode")
-mode = st.sidebar.radio("Select Mode:", ["1. Radial Wind Simulator", "2. LOS Simulator"], index=0)
+mode = st.sidebar.radio("Select Mode:", ["1. Wind Simulator", "2. LOS Simulator"], index=0)
 
 st.sidebar.divider()
 
@@ -63,9 +63,9 @@ def get_ellipsoid_mesh(z_center, a_val, b_val, c_val, sign=1, angle_deg=0.0):
     return x_rot, y_rot, z_mesh
 
 # ==========================================
-# MODE 1: RADIAL WIND SIMULATOR
+# MODE 1: Wind Simulator
 # ==========================================
-if mode == "1. Radial Wind Simulator":
+if mode == "1. Wind Simulator":
     st.sidebar.divider()
     st.sidebar.header("Wind Kinematics")
     N = st.sidebar.number_input("Number of Particles/Clouds (N)", min_value=1, max_value=200000, value=5000, step=500)
