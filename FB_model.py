@@ -10,7 +10,6 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import pandas as pd
-import json
 
 st.set_page_config(layout="wide", page_title="Fermi Bubble Explorer")
 
@@ -46,38 +45,6 @@ if 'calc_state' not in st.session_state:
         'sun_pos': np.array([-8.275, 0.0, 0.0])
     }
 
-# --- SIDEBAR: CONFIG MANAGER ---
-st.sidebar.title("⚙️ Config Manager")
-
-# Import Config
-uploaded_file = st.sidebar.file_uploader("Import Parameters (.json)", type=["json", "txt"])
-if uploaded_file is not None:
-    file_content = uploaded_file.getvalue()
-    # Prevent infinite reruns by checking if content changed
-    if st.session_state.get('last_uploaded_content') != file_content:
-        try:
-            loaded_params = json.loads(file_content.decode("utf-8"))
-            for k, v in loaded_params.items():
-                if k in default_params:
-                    st.session_state[k] = v
-            st.session_state['last_uploaded_content'] = file_content
-            st.rerun()
-        except Exception as e:
-            st.sidebar.error(f"Error loading file: {e}")
-
-# Export Config
-current_params = {k: st.session_state[k] for k in default_params.keys()}
-json_str = json.dumps(current_params, indent=4)
-st.sidebar.download_button(
-    label="Export Current Config",
-    data=json_str,
-    file_name="wind_model_parameters.json",
-    mime="application/json",
-    use_container_width=True
-)
-
-st.sidebar.divider()
-
 # --- SIDEBAR: GLOBAL SETTINGS ---
 st.sidebar.title("Simulation Mode")
 mode = st.sidebar.radio("Select Mode:", ["1. Wind Simulator", "2. LOS Explorer"], index=0)
@@ -85,7 +52,7 @@ mode = st.sidebar.radio("Select Mode:", ["1. Wind Simulator", "2. LOS Explorer"]
 st.sidebar.divider()
 
 with st.sidebar.expander("Bubble Geometry", expanded=True):
-    # Added keys to bind inputs to session state
+    # Bound to session_state via the 'key' argument
     a = st.number_input("Vertical Semi-axis (a) [kpc]", key='a')
     b = st.number_input("Lateral Semi-axis (b) [kpc]", key='b')
     c = st.number_input("Lateral Semi-axis (c) [kpc]", key='c')
@@ -552,3 +519,60 @@ elif mode == "2. LOS Explorer":
             unified_fig.update_yaxes(title_text="Beta (degrees)", secondary_y=False)
             unified_fig.update_yaxes(title_text="Cos(Beta)", secondary_y=True)
             st.plotly_chart(unified_fig, use_container_width=True)
+
+# ==========================================
+# CONFIG MANAGER (Positioned at bottom of sidebar)
+# ==========================================
+st.sidebar.divider()
+st.sidebar.title("⚙️ Config Manager")
+
+# Import Config via text file
+uploaded_file = st.sidebar.file_uploader("Import Parameters (.txt)", type=["txt"])
+if uploaded_file is not None:
+    file_content = uploaded_file.getvalue()
+    # Prevent infinite reruns by checking if content changed
+    if st.session_state.get('last_uploaded_content') != file_content:
+        try:
+            lines = file_content.decode("utf-8").splitlines()
+            for line in lines:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip()
+                    
+                    # Dynamically cast types based on default_params
+                    if k in default_params:
+                        default_val = default_params[k]
+                        if isinstance(default_val, bool):
+                            st.session_state[k] = v.lower() in ['true', '1', 't', 'y', 'yes']
+                        elif isinstance(default_val, int):
+                            st.session_state[k] = int(v)
+                        elif isinstance(default_val, float):
+                            st.session_state[k] = float(v)
+                        else:
+                            st.session_state[k] = str(v)
+                            
+            st.session_state['last_uploaded_content'] = file_content
+            st.rerun()
+        except Exception as e:
+            st.sidebar.error(f"Error loading file: {e}")
+
+# Export Config as text file
+current_params = {k: st.session_state[k] for k in default_params.keys()}
+export_lines = ["# Fermi Bubble Explorer Parameters", "# Exported Config"]
+for k, v in current_params.items():
+    export_lines.append(f"{k}={v}")
+
+text_str = "\n".join(export_lines)
+
+st.sidebar.download_button(
+    label="Export Current Config",
+    data=text_str,
+    file_name="wind_model_parameters.txt",
+    mime="text/plain",
+    use_container_width=True
+)
