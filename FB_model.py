@@ -267,7 +267,7 @@ if mode == "1. Radial Wind Simulator":
         # 2. Render Data Masking Below the Settings
         st.markdown("**Data Masking**")
         mask_query = st.text_input(
-            "Filter data using Python/Pandas syntax (e.g., `(x > 2) & (x < 4)` or `V_LSR > 50`):",
+            "Filter data using Python/Pandas syntax (e.g., `(x > 2) & (x < 4)` or `abs(V_LSR) > 50`):",
             value=""
         )
 
