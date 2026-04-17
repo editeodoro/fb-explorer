@@ -26,7 +26,7 @@ if 'calc_state' not in st.session_state:
 
 # --- SIDEBAR: GLOBAL SETTINGS ---
 st.sidebar.title("Simulation Mode")
-mode = st.sidebar.radio("Select Mode:", ["1. Wind Simulator", "2. LOS Simulator"], index=0)
+mode = st.sidebar.radio("Select Mode:", ["1. Wind Simulator", "2. LOS Explorer"], index=0)
 
 st.sidebar.divider()
 
@@ -380,9 +380,9 @@ if mode == "1. Wind Simulator":
         st.info("Configure your wind kinematics in the sidebar and click 'Calculate model' to generate analysis tools.")
 
 # ==========================================
-# MODE 2: LOS SIMULATOR
+# MODE 2: LOS Explorer
 # ==========================================
-elif mode == "2. LOS Simulator":
+elif mode == "2. LOS Explorer":
     with st.spinner("Rendering Sight-line Geometry..."):
         st.sidebar.divider()
         st.sidebar.header("Sight-line Manager")
