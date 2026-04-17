@@ -232,10 +232,12 @@ if mode == "1. Radial Wind Simulator":
         st.divider()
         st.subheader("Kinematic Analysis Plot")
         
-        plot_type = st.radio("Plot Type:", ["Scatter Plot", "Histogram"], horizontal=True)
-        options = ['l', 'b', 'V_LSR', 'V_GSR', 'd_Sun', 'x', 'y', 'z', 'R', 'θ', 'r', 'φ', 'V_x', 'V_y', 'V_z', 'V_R', 'V_r']
         working_df = df.copy()
         
+        plot_type = st.radio("Plot Type:", ["Scatter Plot", "Histogram"], horizontal=True)
+        options = ['l', 'b', 'V_LSR', 'V_GSR', 'd_Sun', 'x', 'y', 'z', 'R', 'θ', 'r', 'φ', 'V_x', 'V_y', 'V_z', 'V_R', 'V_r']
+        
+        # 1. Render Axis / Bin Settings
         if plot_type == "Scatter Plot":
             col1, col2, col3 = st.columns(3)
             
@@ -251,7 +253,40 @@ if mode == "1. Radial Wind Simulator":
             x_col = f"|{x_axis}|" if abs_x else x_axis
             y_col = f"|{y_axis}|" if abs_y else y_axis
             c_col = f"|{color_var}|" if abs_c else color_var
+            
+        else: # Histogram
+            col1, col2 = st.columns(2)
+            
+            hist_var = col1.selectbox("Quantity to Histogram", options, index=options.index('V_LSR'))
+            abs_hist = col1.checkbox(f"Absolute |{hist_var}|", key='abs_hist')
+            
+            bins = col2.number_input("Number of Bins", min_value=5, max_value=500, value=50, step=5)
+            
+            h_col = f"|{hist_var}|" if abs_hist else hist_var
 
+        # 2. Render Data Masking Below the Settings
+        st.markdown("**Data Masking**")
+        mask_query = st.text_input(
+            "Filter data using Python/Pandas syntax (e.g., `(x > 2) & (x < 4)` or `V_LSR > 50`):",
+            value=""
+        )
+
+        # Apply the mask if it exists
+        if mask_query.strip():
+            try:
+                working_df = working_df.query(mask_query)
+                st.success(f"Mask applied! Points remaining: {len(working_df)} / {len(df)}")
+            except Exception as e:
+                st.error(f"Invalid query syntax. Error: {e}")
+                working_df = df.copy()
+
+        # Stop rendering plots if the mask removes all data
+        if working_df.empty:
+            st.warning("The current mask filtered out all data points. Please adjust your query.")
+            return
+
+        # 3. Apply mathematical conversions and Generate Plot
+        if plot_type == "Scatter Plot":
             if abs_x: working_df[x_col] = working_df[x_axis].abs()
             if abs_y: working_df[y_col] = working_df[y_axis].abs()
             if abs_c: working_df[c_col] = working_df[color_var].abs()
@@ -264,14 +299,6 @@ if mode == "1. Radial Wind Simulator":
             fig_2d.update_traces(marker=dict(size=4, opacity=0.7))
         
         else: # Histogram
-            col1, col2 = st.columns(2)
-            
-            hist_var = col1.selectbox("Quantity to Histogram", options, index=options.index('V_LSR'))
-            abs_hist = col1.checkbox(f"Absolute |{hist_var}|", key='abs_hist')
-            
-            bins = col2.number_input("Number of Bins", min_value=5, max_value=500, value=50, step=5)
-            
-            h_col = f"|{hist_var}|" if abs_hist else hist_var
             if abs_hist:
                 working_df[h_col] = working_df[hist_var].abs()
             
@@ -289,19 +316,20 @@ if mode == "1. Radial Wind Simulator":
         fig_2d.update_layout(template="plotly_dark", height=600)
         st.plotly_chart(fig_2d, use_container_width=True)
         
+        # 4. Render Export Button
         st.divider()
         st.subheader("Export Particle Data")
         
-        df_export = df[options]
+        df_export = working_df[options]
         csv_data = df_export.to_csv(index=False, float_format='%.3g').encode('utf-8')
         
         st.download_button(
-            label="Download Data as CSV",
+            label="Download Masked Data as CSV",
             data=csv_data,
-            file_name="simulated_wind_particles.csv",
+            file_name="simulated_wind_particles_masked.csv",
             mime="text/csv"
         )
-
+    
     # Render the 2D Analysis fragment only if data is populated
     if plot_df is not None:
         render_2d_analysis_plot(plot_df)
