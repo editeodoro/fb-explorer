@@ -315,6 +315,7 @@ if mode == "1. Radial Wind Simulator":
                 hover_data=['x', 'y', 'z']
             )
             fig_2d.update_traces(marker=dict(size=4, opacity=0.7))
+            fig_2d.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(255, 255, 255, 0.2)')
         
         else: # Histogram
             if abs_hist:
