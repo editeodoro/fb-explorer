@@ -61,7 +61,7 @@ def get_ellipsoid_mesh(z_center, a_val, b_val, c_val, sign=1):
 if mode == "1. Radial Wind Simulator":
     st.sidebar.divider()
     st.sidebar.header("Wind Kinematics")
-    N = st.sidebar.number_input("Number of Particles/Clouds (N)", min_value=1, max_value=20000, value=5000, step=500)
+    N = st.sidebar.number_input("Number of Particles/Clouds (N)", min_value=1, max_value=200000, value=5000, step=500)
     
     wind_profile = st.sidebar.radio("Velocity Profile", ["Constant Velocity Wind", "Accelerating Wind"])
     
