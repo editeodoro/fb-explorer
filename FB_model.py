@@ -45,7 +45,6 @@ with st.sidebar.expander("Observer (Sun)"):
     ])
 
 # --- SHARED MATH FUNCTIONS ---
-# Updated to take specific geometry parameters rather than global variables
 def get_ellipsoid_mesh(z_center, a_val, b_val, c_val, sign=1):
     u, v = np.mgrid[0:2*np.pi:40j, 0:np.pi:40j]
     x_mesh = b_val * np.cos(u) * np.sin(v)
@@ -63,6 +62,7 @@ if mode == "1. Radial Wind Simulator":
     st.sidebar.header("Wind Kinematics")
     N = st.sidebar.number_input("Number of Particles/Clouds (N)", min_value=1, max_value=200000, value=5000, step=500)
     
+    distribution_mode = st.sidebar.radio("Particle Distribution", ["Volume Filling", "Edge Confined"])
     wind_profile = st.sidebar.radio("Velocity Profile", ["Constant Velocity Wind", "Accelerating Wind"])
     
     if wind_profile == "Constant Velocity Wind":
@@ -83,18 +83,43 @@ if mode == "1. Radial Wind Simulator":
         st.sidebar.error("Minimum latitude cannot be greater than Maximum latitude.")
 
     @st.cache_data
-    def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat):
+    def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode):
         particles = []
         while len(particles) < N:
             batch = max(N * 2, 500)
-            x = np.random.uniform(-b, b, batch)
-            y = np.random.uniform(-c, c, batch)
-            z = np.random.uniform(-(a+z0), a+z0, batch)
             
-            mask_N = (x**2/b**2 + y**2/c**2 + (z-z0)**2/a**2 <= 1) & (z >= 0)
-            mask_S = (x**2/b**2 + y**2/c**2 + (z+z0)**2/a**2 <= 1) & (z <= 0)
-            
-            pts = np.vstack((x[mask_N | mask_S], y[mask_N | mask_S], z[mask_N | mask_S])).T
+            if distribution_mode == "Volume Filling":
+                x = np.random.uniform(-b, b, batch)
+                y = np.random.uniform(-c, c, batch)
+                z = np.random.uniform(-(a+z0), a+z0, batch)
+                
+                mask_N = (x**2/b**2 + y**2/c**2 + (z-z0)**2/a**2 <= 1) & (z >= 0)
+                mask_S = (x**2/b**2 + y**2/c**2 + (z+z0)**2/a**2 <= 1) & (z <= 0)
+                
+                pts = np.vstack((x[mask_N | mask_S], y[mask_N | mask_S], z[mask_N | mask_S])).T
+            else:
+                # Surface mapping for Edge Confined
+                u = np.random.normal(0, 1, batch)
+                v = np.random.normal(0, 1, batch)
+                w = np.random.normal(0, 1, batch)
+                norm = np.sqrt(u**2 + v**2 + w**2)
+                
+                x_unit = u / norm
+                y_unit = v / norm
+                z_unit = w / norm
+                
+                x_e = x_unit * b
+                y_e = y_unit * c
+                z_e = z_unit * a
+                
+                is_north = np.random.rand(batch) > 0.5
+                
+                x = x_e
+                y = y_e
+                z = np.where(is_north, z_e + z0, z_e - z0)
+                
+                valid_z_mask = (is_north & (z >= 0)) | (~is_north & (z <= 0))
+                pts = np.vstack((x[valid_z_mask], y[valid_z_mask], z[valid_z_mask])).T
             
             if len(pts) > 0:
                 d_vec_temp = pts - sun_pos
@@ -157,14 +182,12 @@ if mode == "1. Radial Wind Simulator":
             'V_R': V_R, 'V_r': V_r_sph
         })
 
-    # Execute simulation only on button click and lock state
     if st.sidebar.button("Calculate model", type="primary"):
         if min_lat <= max_lat:
             with st.spinner("Generating Wind Particles and Kinematics..."):
-                df_wind = generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat)
+                df_wind = generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode)
                 sample_size = min(N, 2000)
                 
-                # Save exact current geometry and dataset state into session dictionary
                 st.session_state['calc_state'] = {
                     'data': df_wind,
                     'sample_data': df_wind.sample(sample_size),
@@ -175,13 +198,11 @@ if mode == "1. Radial Wind Simulator":
         else:
             st.error("Cannot calculate model: Minimum latitude must be less than or equal to Maximum latitude.")
 
-    # Fetch ONLY the data and particle N from the locked state
     cs = st.session_state['calc_state']
     plot_df = cs['data']
     plot_sample = cs['sample_data']
     plot_N = cs['N']
 
-    # --- 3D PARTICLE PLOT (Always Visible) ---
     if plot_df is not None:
         st.subheader(f"3D Particle Distribution (N={plot_N})")
     else:
@@ -194,7 +215,6 @@ if mode == "1. Radial Wind Simulator":
     for coords in [([ax_range, [0,0], [0,0]]), ([[0,0], ax_range, [0,0]]), ([[0,0], [0,0], ax_range])]:
         fig_wind.add_trace(go.Scatter3d(x=coords[0], y=coords[1], z=coords[2], mode='lines', line=dict(color='white', width=6), showlegend=False))
     
-    # USE THE LIVE VARIABLES (a, b, c, z0) HERE INSTEAD OF LOCKED STATE
     for z_c, s in [(z0, 1), (-z0, -1)]:
         bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(z_c, a, b, c, s)
         fig_wind.add_trace(go.Surface(
@@ -203,7 +223,6 @@ if mode == "1. Radial Wind Simulator":
             opacity=0.1, showscale=False, hoverinfo='skip'
         ))
 
-    # Plot sample data only if calculation occurred (remains locked)
     if plot_sample is not None:
         fig_wind.add_trace(go.Scatter3d(
             x=plot_sample['x'], y=plot_sample['y'], z=plot_sample['z'],
@@ -216,7 +235,6 @@ if mode == "1. Radial Wind Simulator":
     gx, gy = np.meshgrid(np.linspace(-limit, limit, 10), np.linspace(-limit, limit, 10))
     fig_wind.add_trace(go.Surface(x=gx, y=gy, z=np.zeros_like(gx), colorscale=[[0, 'blue'], [1, 'blue']], opacity=0.15, showscale=False, name='Galactic Plane'))
     
-    # USE THE LIVE sun_pos VARIABLE HERE
     fig_wind.add_trace(go.Scatter3d(
         x=[sun_pos[0]], y=[sun_pos[1]], z=[sun_pos[2]],
         mode='markers+text', text=["Sun"], textposition="top center",
@@ -330,12 +348,10 @@ if mode == "1. Radial Wind Simulator":
             mime="text/csv"
         )
     
-    # Render the 2D Analysis fragment only if data is populated
     if plot_df is not None:
         render_2d_analysis_plot(plot_df)
     else:
         st.info("Configure your wind kinematics in the sidebar and click 'Calculate model' to generate analysis tools.")
-
 
 # ==========================================
 # MODE 2: LOS SIMULATOR
@@ -387,7 +403,6 @@ elif mode == "2. LOS Simulator":
         gx, gy = np.meshgrid(np.linspace(-limit, limit, 10), np.linspace(-limit, limit, 10))
         fig.add_trace(go.Surface(x=gx, y=gy, z=np.zeros_like(gx), colorscale=[[0, 'blue'], [1, 'blue']], opacity=0.15, showscale=False))
 
-        # Pass active globals directly for interactive Mode 2
         for z_c, s in [(z0, 1), (-z0, -1)]:
             bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(z_c, a, b, c, s)
             fig.add_trace(go.Surface(x=bx_mesh, y=by_mesh, z=bz_mesh, colorscale=[[0, 'red'], [1, 'red']], opacity=0.2, showscale=False))
