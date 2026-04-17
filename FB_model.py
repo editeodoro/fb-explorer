@@ -14,7 +14,6 @@ import pandas as pd
 st.set_page_config(layout="wide", page_title="Fermi Bubble Explorer")
 
 # --- INITIALIZE DEFAULT PARAMETERS IN SESSION STATE ---
-# This allows us to overwrite them dynamically via file import
 default_params = {
     'a': 6.0, 'b': 4.0, 'c': 4.0, 'z0': 5.0, 'az_angle': 0.0,
     'sun_x': -8.275, 'sun_y': 0.0, 'sun_z': 0.0,
@@ -34,7 +33,6 @@ for k, v in default_params.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-# Initialize Session State for locked calculations
 if 'calc_state' not in st.session_state:
     st.session_state['calc_state'] = {
         'data': None,
@@ -45,6 +43,37 @@ if 'calc_state' not in st.session_state:
         'sun_pos': np.array([-8.275, 0.0, 0.0])
     }
 
+# --- CALLBACK FOR CONFIG UPLOAD ---
+# This runs BEFORE the page renders, preventing the "widget already instantiated" error.
+def process_uploaded_config():
+    uploaded_file = st.session_state.get('config_uploader')
+    if uploaded_file is not None:
+        try:
+            file_content = uploaded_file.getvalue()
+            lines = file_content.decode("utf-8").splitlines()
+            for line in lines:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip()
+                    
+                    if k in default_params:
+                        default_val = default_params[k]
+                        if isinstance(default_val, bool):
+                            st.session_state[k] = v.lower() in ['true', '1', 't', 'y', 'yes']
+                        elif isinstance(default_val, int):
+                            st.session_state[k] = int(v)
+                        elif isinstance(default_val, float):
+                            st.session_state[k] = float(v)
+                        else:
+                            st.session_state[k] = str(v)
+        except Exception as e:
+            st.error(f"Error parsing config file: {e}")
+
 # --- SIDEBAR: GLOBAL SETTINGS ---
 st.sidebar.title("Simulation Mode")
 mode = st.sidebar.radio("Select Mode:", ["1. Wind Simulator", "2. LOS Explorer"], index=0)
@@ -52,7 +81,6 @@ mode = st.sidebar.radio("Select Mode:", ["1. Wind Simulator", "2. LOS Explorer"]
 st.sidebar.divider()
 
 with st.sidebar.expander("Bubble Geometry", expanded=True):
-    # Bound to session_state via the 'key' argument
     a = st.number_input("Vertical Semi-axis (a) [kpc]", key='a')
     b = st.number_input("Lateral Semi-axis (b) [kpc]", key='b')
     c = st.number_input("Lateral Semi-axis (c) [kpc]", key='c')
@@ -74,7 +102,6 @@ def get_ellipsoid_mesh(z_center, a_val, b_val, c_val, sign=1, angle_deg=0.0):
     y_mesh = c_val * np.sin(u) * np.sin(v)
     z_mesh = z_center + a_val * np.cos(v)
     
-    # Apply azimuthal rotation
     gamma = np.radians(angle_deg)
     x_rot = x_mesh * np.cos(gamma) - y_mesh * np.sin(gamma)
     y_rot = x_mesh * np.sin(gamma) + y_mesh * np.cos(gamma)
@@ -95,7 +122,6 @@ if mode == "1. Wind Simulator":
     kinematic_model = st.sidebar.radio("Flow Geometry", ["Radial Outflow", "Ellipsoidal Streamlines"], key='kinematic_model')
     wind_profile = st.sidebar.radio("Velocity Profile", ["Constant Velocity Wind", "Accelerating Wind"], key='wind_profile')
     
-    # Track active variables safely without breaking Streamlit keys
     if wind_profile == "Constant Velocity Wind":
         v_r_const_val = st.sidebar.number_input("Constant Radial Velocity [km/s]", key='v_r_const')
         calc_m_slope = 0.0
@@ -125,7 +151,6 @@ if mode == "1. Wind Simulator":
         while len(particles_b) < N:
             batch = max(N * 2, 500)
             
-            # Generate in Bubble Frame
             if distribution_mode == "Volume Filling":
                 x = np.random.uniform(-b, b, batch)
                 y = np.random.uniform(-c, c, batch)
@@ -159,7 +184,6 @@ if mode == "1. Wind Simulator":
                 pts = np.vstack((x[valid_z_mask], y[valid_z_mask], z[valid_z_mask])).T
             
             if len(pts) > 0:
-                # Temporarily rotate to Galactic Frame to check LOS latitude limits
                 pts_g = np.empty_like(pts)
                 pts_g[:,0] = pts[:,0] * cos_g - pts[:,1] * sin_g
                 pts_g[:,1] = pts[:,0] * sin_g + pts[:,1] * cos_g
@@ -170,7 +194,6 @@ if mode == "1. Wind Simulator":
                 b_deg_temp = np.degrees(np.arcsin(d_vec_temp[:,2] / d_temp))
                 
                 valid_mask = (np.abs(b_deg_temp) >= min_lat) & (np.abs(b_deg_temp) <= max_lat)
-                # Keep valid points in their original Bubble Frame coordinates
                 valid_pts_b = pts[valid_mask]
                 particles_b.extend(valid_pts_b)
                 
@@ -181,17 +204,14 @@ if mode == "1. Wind Simulator":
         particles_b = np.array(particles_b)
         x_b, y_b, z_b = particles_b[:,0], particles_b[:,1], particles_b[:,2]
         
-        # Calculate distances (Invariant to rotation)
         r = np.sqrt(x_b**2 + y_b**2 + z_b**2)
         r_safe = np.maximum(r, 1e-9)
 
-        # Determine scalar velocity magnitude
         if wind_profile == "Constant Velocity Wind":
             V_mag = np.full(N, v_r_const)
         else:
             V_mag = np.minimum(m_slope * r_safe, v_r_max)
         
-        # Calculate Velocity Vectors in Bubble Frame
         if kinematic_model == "Ellipsoidal Streamlines":
             z_c = np.where(z_b > 0, z0, -z0)
             z_prime = z_b - z_c
@@ -213,7 +233,6 @@ if mode == "1. Wind Simulator":
             Vy_b = V_mag * (y_b / r_safe)
             Vz_b = V_mag * (z_b / r_safe)
         
-        # Rotate Position and Velocity coordinates to Galactic Frame
         x = x_b * cos_g - y_b * sin_g
         y = x_b * sin_g + y_b * cos_g
         z = z_b
@@ -224,7 +243,6 @@ if mode == "1. Wind Simulator":
         
         particles = np.vstack((x, y, z)).T
         
-        # Calculate final observable parameters in Galactic Frame
         R = np.sqrt(x**2 + y**2)
         R_safe = np.maximum(R, 1e-9)
         theta_deg = np.degrees(np.arctan2(y, x))
@@ -426,7 +444,6 @@ elif mode == "2. LOS Explorer":
             gamma = np.radians(angle_deg)
             cos_g, sin_g = np.cos(gamma), np.sin(gamma)
             
-            # Map Ray to Bubble Frame
             S = np.array([
                 S_gal[0] * cos_g + S_gal[1] * sin_g,
                 -S_gal[0] * sin_g + S_gal[1] * cos_g,
@@ -448,7 +465,6 @@ elif mode == "2. LOS Explorer":
             valid = []
             for t in t_vals:
                 if t > 0:
-                    # Map collision back out to Galactic Frame
                     pt_gal = S_gal + t * d_vec_gal
                     if (z_offset > 0 and pt_gal[2] >= -0.01) or (z_offset < 0 and pt_gal[2] <= 0.01):
                         valid.append((t, pt_gal))
@@ -461,7 +477,6 @@ elif mode == "2. LOS Explorer":
             inters = sorted(calculate_intersections(sun_pos, d_vec, z0, az_angle) + calculate_intersections(sun_pos, d_vec, -z0, az_angle), key=lambda x: x[0])
             all_los_data.append({'id': i+1, 'config': config, 'd_vec': d_vec, 'inters': inters})
 
-        # --- 3D PLOT ---
         fig = go.Figure()
         limit = 15
         ax_range = [-limit, limit]
@@ -487,7 +502,6 @@ elif mode == "2. LOS Explorer":
         fig.update_layout(scene=dict(aspectmode='manual', aspectratio=dict(x=1, y=1, z=1), xaxis=dict(range=[-limit, limit]), yaxis=dict(range=[-limit, limit]), zaxis=dict(range=[-limit, limit])), template="plotly_dark", height=700, margin=dict(l=0, r=0, b=0, t=0), uirevision='constant')
         st.plotly_chart(fig, use_container_width=True)
 
-        # --- LOS DATA TABLE ---
         st.subheader("Combined Intersection Data")
         table_rows = []
         for data in all_los_data:
@@ -526,40 +540,13 @@ elif mode == "2. LOS Explorer":
 st.sidebar.divider()
 st.sidebar.title("⚙️ Config Manager")
 
-# Import Config via text file
-uploaded_file = st.sidebar.file_uploader("Import Parameters (.txt)", type=["txt"])
-if uploaded_file is not None:
-    file_content = uploaded_file.getvalue()
-    # Prevent infinite reruns by checking if content changed
-    if st.session_state.get('last_uploaded_content') != file_content:
-        try:
-            lines = file_content.decode("utf-8").splitlines()
-            for line in lines:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                
-                if "=" in line:
-                    k, v = line.split("=", 1)
-                    k = k.strip()
-                    v = v.strip()
-                    
-                    # Dynamically cast types based on default_params
-                    if k in default_params:
-                        default_val = default_params[k]
-                        if isinstance(default_val, bool):
-                            st.session_state[k] = v.lower() in ['true', '1', 't', 'y', 'yes']
-                        elif isinstance(default_val, int):
-                            st.session_state[k] = int(v)
-                        elif isinstance(default_val, float):
-                            st.session_state[k] = float(v)
-                        else:
-                            st.session_state[k] = str(v)
-                            
-            st.session_state['last_uploaded_content'] = file_content
-            st.rerun()
-        except Exception as e:
-            st.sidebar.error(f"Error loading file: {e}")
+# Utilizing the on_change callback so state overrides happen before the script runs
+st.sidebar.file_uploader(
+    "Import Parameters (.txt)", 
+    type=["txt"], 
+    key='config_uploader', 
+    on_change=process_uploaded_config
+)
 
 # Export Config as text file
 current_params = {k: st.session_state[k] for k in default_params.keys()}
