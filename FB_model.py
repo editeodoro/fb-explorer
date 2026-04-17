@@ -20,6 +20,7 @@ if 'calc_state' not in st.session_state:
         'sample_data': None,
         'N': 0,
         'a': 6.0, 'b': 4.0, 'c': 4.0, 'z0': 5.0,
+        'az_angle': 0.0,
         'sun_pos': np.array([-8.275, 0.0, 0.0])
     }
 
@@ -34,6 +35,7 @@ with st.sidebar.expander("Bubble Geometry"):
     b = st.number_input("Lateral Semi-axis (b) [kpc]", value=4.0)
     c = st.number_input("Lateral Semi-axis (c) [kpc]", value=4.0)
     z0 = st.number_input("Center Offset (z0) [kpc]", value=5.0)
+    az_angle = st.number_input("Azimuthal Rotation [deg]", value=0.0, help="Rotates the bubble around the vertical Z-axis.")
 
 st.sidebar.divider()
 
@@ -45,14 +47,20 @@ with st.sidebar.expander("Observer (Sun)"):
     ])
 
 # --- SHARED MATH FUNCTIONS ---
-def get_ellipsoid_mesh(z_center, a_val, b_val, c_val, sign=1):
+def get_ellipsoid_mesh(z_center, a_val, b_val, c_val, sign=1, angle_deg=0.0):
     u, v = np.mgrid[0:2*np.pi:40j, 0:np.pi:40j]
     x_mesh = b_val * np.cos(u) * np.sin(v)
     y_mesh = c_val * np.sin(u) * np.sin(v)
     z_mesh = z_center + a_val * np.cos(v)
+    
+    # Apply azimuthal rotation
+    gamma = np.radians(angle_deg)
+    x_rot = x_mesh * np.cos(gamma) - y_mesh * np.sin(gamma)
+    y_rot = x_mesh * np.sin(gamma) + y_mesh * np.cos(gamma)
+    
     if sign > 0: z_mesh[z_mesh < 0] = np.nan
     else: z_mesh[z_mesh > 0] = np.nan
-    return x_mesh, y_mesh, z_mesh
+    return x_rot, y_rot, z_mesh
 
 # ==========================================
 # MODE 1: RADIAL WIND SIMULATOR
@@ -84,11 +92,15 @@ if mode == "1. Radial Wind Simulator":
         st.sidebar.error("Minimum latitude cannot be greater than Maximum latitude.")
 
     @st.cache_data
-    def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode, kinematic_model):
-        particles = []
-        while len(particles) < N:
+    def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode, kinematic_model, az_angle):
+        particles_b = []
+        gamma = np.radians(az_angle)
+        cos_g, sin_g = np.cos(gamma), np.sin(gamma)
+        
+        while len(particles_b) < N:
             batch = max(N * 2, 500)
             
+            # Generate in Bubble Frame
             if distribution_mode == "Volume Filling":
                 x = np.random.uniform(-b, b, batch)
                 y = np.random.uniform(-c, c, batch)
@@ -99,7 +111,6 @@ if mode == "1. Radial Wind Simulator":
                 
                 pts = np.vstack((x[mask_N | mask_S], y[mask_N | mask_S], z[mask_N | mask_S])).T
             else:
-                # Surface mapping for Edge Confined
                 u = np.random.normal(0, 1, batch)
                 v = np.random.normal(0, 1, batch)
                 w = np.random.normal(0, 1, batch)
@@ -123,28 +134,31 @@ if mode == "1. Radial Wind Simulator":
                 pts = np.vstack((x[valid_z_mask], y[valid_z_mask], z[valid_z_mask])).T
             
             if len(pts) > 0:
-                d_vec_temp = pts - sun_pos
+                # Temporarily rotate to Galactic Frame to check LOS latitude limits
+                pts_g = np.empty_like(pts)
+                pts_g[:,0] = pts[:,0] * cos_g - pts[:,1] * sin_g
+                pts_g[:,1] = pts[:,0] * sin_g + pts[:,1] * cos_g
+                pts_g[:,2] = pts[:,2]
+                
+                d_vec_temp = pts_g - sun_pos
                 d_temp = np.linalg.norm(d_vec_temp, axis=1)
                 b_deg_temp = np.degrees(np.arcsin(d_vec_temp[:,2] / d_temp))
                 
-                valid_pts = pts[(np.abs(b_deg_temp) >= min_lat) & (np.abs(b_deg_temp) <= max_lat)]
-                particles.extend(valid_pts)
+                valid_mask = (np.abs(b_deg_temp) >= min_lat) & (np.abs(b_deg_temp) <= max_lat)
+                # Keep valid points in their original Bubble Frame coordinates
+                valid_pts_b = pts[valid_mask]
+                particles_b.extend(valid_pts_b)
                 
-            if len(particles) >= N:
-                particles = particles[:N]
+            if len(particles_b) >= N:
+                particles_b = particles_b[:N]
                 break
                 
-        particles = np.array(particles)
-        x, y, z = particles[:,0], particles[:,1], particles[:,2]
+        particles_b = np.array(particles_b)
+        x_b, y_b, z_b = particles_b[:,0], particles_b[:,1], particles_b[:,2]
         
-        R = np.sqrt(x**2 + y**2)
-        r = np.sqrt(x**2 + y**2 + z**2)
-        
-        R_safe = np.maximum(R, 1e-9)
+        # Calculate distances (Invariant to rotation)
+        r = np.sqrt(x_b**2 + y_b**2 + z_b**2)
         r_safe = np.maximum(r, 1e-9)
-        
-        theta_deg = np.degrees(np.arctan2(y, x))
-        phi_deg = np.degrees(np.arccos(z / r_safe))
 
         # Determine scalar velocity magnitude
         if wind_profile == "Constant Velocity Wind":
@@ -152,34 +166,47 @@ if mode == "1. Radial Wind Simulator":
         else:
             V_mag = np.minimum(m_slope * r_safe, v_r_max)
         
-        # Apply Directional Geometry
+        # Calculate Velocity Vectors in Bubble Frame
         if kinematic_model == "Ellipsoidal Streamlines":
-            z_c = np.where(z > 0, z0, -z0)
-            z_prime = z - z_c
-            R_ell_sq = (x/b)**2 + (y/c)**2
-            sign_z = np.where(z > 0, 1.0, -1.0)
+            z_c = np.where(z_b > 0, z0, -z0)
+            z_prime = z_b - z_c
+            R_ell_sq = (x_b/b)**2 + (y_b/c)**2
+            sign_z = np.where(z_b > 0, 1.0, -1.0)
             
-            # Tangent vector D components
-            Dx = -x * z_prime * sign_z
-            Dy = -y * z_prime * sign_z
+            Dx = -x_b * z_prime * sign_z
+            Dy = -y_b * z_prime * sign_z
             Dz = (a**2) * R_ell_sq * sign_z
             
             norm_D = np.sqrt(Dx**2 + Dy**2 + Dz**2)
-            # Prevent division by zero precisely at the poles
             norm_D = np.where(norm_D == 0, 1e-9, norm_D)
             
-            Vx = V_mag * (Dx / norm_D)
-            Vy = V_mag * (Dy / norm_D)
-            Vz = V_mag * (Dz / norm_D)
+            Vx_b = V_mag * (Dx / norm_D)
+            Vy_b = V_mag * (Dy / norm_D)
+            Vz_b = V_mag * (Dz / norm_D)
         else:
-            # Pure Radial Outflow
-            Vx = V_mag * (x / r_safe)
-            Vy = V_mag * (y / r_safe)
-            Vz = V_mag * (z / r_safe)
+            Vx_b = V_mag * (x_b / r_safe)
+            Vy_b = V_mag * (y_b / r_safe)
+            Vz_b = V_mag * (z_b / r_safe)
         
-        # Projections
+        # Rotate Position and Velocity coordinates to Galactic Frame
+        x = x_b * cos_g - y_b * sin_g
+        y = x_b * sin_g + y_b * cos_g
+        z = z_b
+        
+        Vx = Vx_b * cos_g - Vy_b * sin_g
+        Vy = Vx_b * sin_g + Vy_b * cos_g
+        Vz = Vz_b
+        
+        particles = np.vstack((x, y, z)).T
+        
+        # Calculate final observable parameters in Galactic Frame
+        R = np.sqrt(x**2 + y**2)
+        R_safe = np.maximum(R, 1e-9)
+        theta_deg = np.degrees(np.arctan2(y, x))
+        phi_deg = np.degrees(np.arccos(z / r_safe))
+        
         V_R = (x * Vx + y * Vy) / R_safe
-        V_r = (x * Vx + y * Vy + z * Vz) / r_safe  # True radial projection
+        V_r = (x * Vx + y * Vy + z * Vz) / r_safe
         
         v_vec = np.vstack((Vx, Vy, Vz)).T
         d_vec = particles - sun_pos
@@ -210,14 +237,14 @@ if mode == "1. Radial Wind Simulator":
     if st.sidebar.button("Calculate model", type="primary"):
         if min_lat <= max_lat:
             with st.spinner("Generating Wind Particles and Kinematics..."):
-                df_wind = generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode, kinematic_model)
+                df_wind = generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode, kinematic_model, az_angle)
                 sample_size = min(N, 2000)
                 
                 st.session_state['calc_state'] = {
                     'data': df_wind,
                     'sample_data': df_wind.sample(sample_size),
                     'N': N,
-                    'a': a, 'b': b, 'c': c, 'z0': z0,
+                    'a': a, 'b': b, 'c': c, 'z0': z0, 'az_angle': az_angle,
                     'sun_pos': sun_pos
                 }
         else:
@@ -227,6 +254,7 @@ if mode == "1. Radial Wind Simulator":
     plot_df = cs['data']
     plot_sample = cs['sample_data']
     plot_N = cs['N']
+    plot_az = cs.get('az_angle', 0.0)
 
     if plot_df is not None:
         st.subheader(f"3D Particle Distribution (N={plot_N})")
@@ -241,7 +269,7 @@ if mode == "1. Radial Wind Simulator":
         fig_wind.add_trace(go.Scatter3d(x=coords[0], y=coords[1], z=coords[2], mode='lines', line=dict(color='white', width=6), showlegend=False))
     
     for z_c, s in [(z0, 1), (-z0, -1)]:
-        bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(z_c, a, b, c, s)
+        bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(z_c, a, b, c, s, plot_az if plot_df is not None else az_angle)
         fig_wind.add_trace(go.Surface(
             x=bx_mesh, y=by_mesh, z=bz_mesh,
             colorscale=[[0, 'white'], [1, 'white']],
@@ -280,16 +308,12 @@ if mode == "1. Radial Wind Simulator":
         plot_type = st.radio("Plot Type:", ["Scatter Plot", "Histogram"], horizontal=True)
         options = ['l', 'b', 'V_LSR', 'V_GSR', 'd_Sun', 'x', 'y', 'z', 'R', 'θ', 'r', 'φ', 'V_x', 'V_y', 'V_z', 'V_R', 'V_r', 'V_mag']
         
-        # 1. Render Axis / Bin Settings
         if plot_type == "Scatter Plot":
             col1, col2, col3 = st.columns(3)
-            
             x_axis = col1.selectbox("X-Axis", options, index=options.index('b'))
             abs_x = col1.checkbox(f"Absolute |{x_axis}|", key='abs_x')
-            
             y_axis = col2.selectbox("Y-Axis", options, index=options.index('V_LSR'))
             abs_y = col2.checkbox(f"Absolute |{y_axis}|", key='abs_y')
-            
             color_var = col3.selectbox("Color By", options, index=options.index('l'))
             abs_c = col3.checkbox(f"Absolute |{color_var}|", key='abs_c')
 
@@ -297,24 +321,16 @@ if mode == "1. Radial Wind Simulator":
             y_col = f"|{y_axis}|" if abs_y else y_axis
             c_col = f"|{color_var}|" if abs_c else color_var
             
-        else: # Histogram
+        else:
             col1, col2 = st.columns(2)
-            
             hist_var = col1.selectbox("Quantity to Histogram", options, index=options.index('V_LSR'))
             abs_hist = col1.checkbox(f"Absolute |{hist_var}|", key='abs_hist')
-            
             bins = col2.number_input("Number of Bins", min_value=5, max_value=500, value=50, step=5)
-            
             h_col = f"|{hist_var}|" if abs_hist else hist_var
 
-        # 2. Render Data Masking Below the Settings
         st.markdown("**Data Masking**")
-        mask_query = st.text_input(
-            "Filter data using Python/Pandas syntax (e.g., `(x > 2) & (x < 4)` or `abs(V_LSR) > 50`):",
-            value=""
-        )
+        mask_query = st.text_input("Filter data using Python/Pandas syntax (e.g., `(x > 2) & (x < 4)`):", value="")
 
-        # Apply the mask if it exists
         if mask_query.strip():
             try:
                 working_df = working_df.query(mask_query)
@@ -323,12 +339,10 @@ if mode == "1. Radial Wind Simulator":
                 st.error(f"Invalid query syntax. Error: {e}")
                 working_df = df.copy()
 
-        # Stop rendering plots if the mask removes all data
         if working_df.empty:
             st.warning("The current mask filtered out all data points. Please adjust your query.")
             return
 
-        # 3. Apply mathematical conversions and Generate Plot
         if plot_type == "Scatter Plot":
             if abs_x: working_df[x_col] = working_df[x_axis].abs()
             if abs_y: working_df[y_col] = working_df[y_axis].abs()
@@ -336,45 +350,29 @@ if mode == "1. Radial Wind Simulator":
 
             fig_2d = px.scatter(
                 working_df, x=x_col, y=y_col, color=c_col,
-                color_continuous_scale='RdBu_r',
-                hover_data=['x', 'y', 'z']
+                color_continuous_scale='RdBu_r', hover_data=['x', 'y', 'z']
             )
             fig_2d.update_traces(marker=dict(size=4, opacity=0.7))
-            
-            # Explicitly enable and style the vertical grid
             fig_2d.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(255, 255, 255, 0.2)')
         
-        else: # Histogram
-            if abs_hist:
-                working_df[h_col] = working_df[hist_var].abs()
-            
+        else:
+            if abs_hist: working_df[h_col] = working_df[hist_var].abs()
             min_val = working_df[h_col].min()
             max_val = working_df[h_col].max()
             bin_size = (max_val - min_val) / bins if max_val > min_val else 1.0
             
-            fig_2d = px.histogram(
-                working_df, x=h_col,
-                color_discrete_sequence=['#00FFFF']
-            )
+            fig_2d = px.histogram(working_df, x=h_col, color_discrete_sequence=['#00FFFF'])
             fig_2d.update_traces(xbins=dict(start=min_val, end=max_val, size=bin_size), autobinx=False)
             fig_2d.update_layout(bargap=0.1)
 
         fig_2d.update_layout(template="plotly_dark", height=600)
         st.plotly_chart(fig_2d, use_container_width=True)
         
-        # 4. Render Export Button
         st.divider()
         st.subheader("Export Particle Data")
-        
         df_export = working_df[options]
         csv_data = df_export.to_csv(index=False, float_format='%.3g').encode('utf-8')
-        
-        st.download_button(
-            label="Download Masked Data as CSV",
-            data=csv_data,
-            file_name="simulated_wind_particles_masked.csv",
-            mime="text/csv"
-        )
+        st.download_button(label="Download Masked Data as CSV", data=csv_data, file_name="simulated_wind_particles_masked.csv", mime="text/csv")
     
     if plot_df is not None:
         render_2d_analysis_plot(plot_df)
@@ -399,26 +397,43 @@ elif mode == "2. LOS Simulator":
                 lat_val = st.number_input(f"b° (LOS {i+1})", min_value=-90.0, max_value=90.0, value=30.0 - (i*5), key=f"b{i}")
                 los_configs.append({'l': l_val, 'b': lat_val, 'color': colors[i]})
 
-        def calculate_intersections(S, d_vec_loc, z_offset):
+        def calculate_intersections(S_gal, d_vec_gal, z_offset, angle_deg):
+            gamma = np.radians(angle_deg)
+            cos_g, sin_g = np.cos(gamma), np.sin(gamma)
+            
+            # Map Ray to Bubble Frame
+            S = np.array([
+                S_gal[0] * cos_g + S_gal[1] * sin_g,
+                -S_gal[0] * sin_g + S_gal[1] * cos_g,
+                S_gal[2]
+            ])
+            d_vec_loc = np.array([
+                d_vec_gal[0] * cos_g + d_vec_gal[1] * sin_g,
+                -d_vec_gal[0] * sin_g + d_vec_gal[1] * cos_g,
+                d_vec_gal[2]
+            ])
+            
             A = (d_vec_loc[0]**2 / b**2) + (d_vec_loc[1]**2 / c**2) + (d_vec_loc[2]**2 / a**2)
             B = 2 * ( (S[0]*d_vec_loc[0]/b**2) + (S[1]*d_vec_loc[1]/c**2) + (d_vec_loc[2]*(S[2]-z_offset)/a**2) )
             C = (S[0]**2 / b**2) + (S[1]**2 / c**2) + ((S[2]-z_offset)**2 / a**2) - 1
             delta = B**2 - 4*A*C
+            
             if delta < 0: return []
             t_vals = [(-B - np.sqrt(delta)) / (2*A), (-B + np.sqrt(delta)) / (2*A)]
             valid = []
             for t in t_vals:
                 if t > 0:
-                    pt = S + t * d_vec_loc
-                    if (z_offset > 0 and pt[2] >= -0.01) or (z_offset < 0 and pt[2] <= 0.01):
-                        valid.append((t, pt))
+                    # Map collision back out to Galactic Frame
+                    pt_gal = S_gal + t * d_vec_gal
+                    if (z_offset > 0 and pt_gal[2] >= -0.01) or (z_offset < 0 and pt_gal[2] <= 0.01):
+                        valid.append((t, pt_gal))
             return valid
 
         all_los_data = []
         for i, config in enumerate(los_configs):
             l_rad, b_rad = np.radians(config['l']), np.radians(config['b'])
             d_vec = np.array([np.cos(b_rad)*np.cos(l_rad), np.cos(b_rad)*np.sin(l_rad), np.sin(b_rad)])
-            inters = sorted(calculate_intersections(sun_pos, d_vec, z0) + calculate_intersections(sun_pos, d_vec, -z0), key=lambda x: x[0])
+            inters = sorted(calculate_intersections(sun_pos, d_vec, z0, az_angle) + calculate_intersections(sun_pos, d_vec, -z0, az_angle), key=lambda x: x[0])
             all_los_data.append({'id': i+1, 'config': config, 'd_vec': d_vec, 'inters': inters})
 
         # --- 3D PLOT ---
@@ -432,7 +447,7 @@ elif mode == "2. LOS Simulator":
         fig.add_trace(go.Surface(x=gx, y=gy, z=np.zeros_like(gx), colorscale=[[0, 'blue'], [1, 'blue']], opacity=0.15, showscale=False))
 
         for z_c, s in [(z0, 1), (-z0, -1)]:
-            bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(z_c, a, b, c, s)
+            bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(z_c, a, b, c, s, az_angle)
             fig.add_trace(go.Surface(x=bx_mesh, y=by_mesh, z=bz_mesh, colorscale=[[0, 'red'], [1, 'red']], opacity=0.2, showscale=False))
 
         for data in all_los_data:
