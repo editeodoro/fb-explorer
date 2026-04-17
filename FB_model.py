@@ -63,6 +63,7 @@ if mode == "1. Radial Wind Simulator":
     N = st.sidebar.number_input("Number of Particles/Clouds (N)", min_value=1, max_value=200000, value=5000, step=500)
     
     distribution_mode = st.sidebar.radio("Particle Distribution", ["Volume Filling", "Edge Confined"])
+    kinematic_model = st.sidebar.radio("Flow Geometry", ["Radial Outflow", "Ellipsoidal Streamlines"])
     wind_profile = st.sidebar.radio("Velocity Profile", ["Constant Velocity Wind", "Accelerating Wind"])
     
     if wind_profile == "Constant Velocity Wind":
@@ -83,7 +84,7 @@ if mode == "1. Radial Wind Simulator":
         st.sidebar.error("Minimum latitude cannot be greater than Maximum latitude.")
 
     @st.cache_data
-    def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode):
+    def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode, kinematic_model):
         particles = []
         while len(particles) < N:
             batch = max(N * 2, 500)
@@ -145,16 +146,40 @@ if mode == "1. Radial Wind Simulator":
         theta_deg = np.degrees(np.arctan2(y, x))
         phi_deg = np.degrees(np.arccos(z / r_safe))
 
+        # Determine scalar velocity magnitude
         if wind_profile == "Constant Velocity Wind":
-            V_r_sph = np.full(N, v_r_const)
+            V_mag = np.full(N, v_r_const)
         else:
-            V_r_sph = np.minimum(m_slope * r_safe, v_r_max)
+            V_mag = np.minimum(m_slope * r_safe, v_r_max)
         
-        Vx = V_r_sph * (x / r_safe)
-        Vy = V_r_sph * (y / r_safe)
-        Vz = V_r_sph * (z / r_safe)
+        # Apply Directional Geometry
+        if kinematic_model == "Ellipsoidal Streamlines":
+            z_c = np.where(z > 0, z0, -z0)
+            z_prime = z - z_c
+            R_ell_sq = (x/b)**2 + (y/c)**2
+            sign_z = np.where(z > 0, 1.0, -1.0)
+            
+            # Tangent vector D components
+            Dx = -x * z_prime * sign_z
+            Dy = -y * z_prime * sign_z
+            Dz = (a**2) * R_ell_sq * sign_z
+            
+            norm_D = np.sqrt(Dx**2 + Dy**2 + Dz**2)
+            # Prevent division by zero precisely at the poles
+            norm_D = np.where(norm_D == 0, 1e-9, norm_D)
+            
+            Vx = V_mag * (Dx / norm_D)
+            Vy = V_mag * (Dy / norm_D)
+            Vz = V_mag * (Dz / norm_D)
+        else:
+            # Pure Radial Outflow
+            Vx = V_mag * (x / r_safe)
+            Vy = V_mag * (y / r_safe)
+            Vz = V_mag * (z / r_safe)
         
+        # Projections
         V_R = (x * Vx + y * Vy) / R_safe
+        V_r = (x * Vx + y * Vy + z * Vz) / r_safe  # True radial projection
         
         v_vec = np.vstack((Vx, Vy, Vz)).T
         d_vec = particles - sun_pos
@@ -179,13 +204,13 @@ if mode == "1. Radial Wind Simulator":
             'x': x, 'y': y, 'z': z,
             'R': R, 'θ': theta_deg, 'r': r, 'φ': phi_deg,
             'V_x': Vx, 'V_y': Vy, 'V_z': Vz,
-            'V_R': V_R, 'V_r': V_r_sph
+            'V_R': V_R, 'V_r': V_r, 'V_mag': V_mag
         })
 
     if st.sidebar.button("Calculate model", type="primary"):
         if min_lat <= max_lat:
             with st.spinner("Generating Wind Particles and Kinematics..."):
-                df_wind = generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode)
+                df_wind = generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode, kinematic_model)
                 sample_size = min(N, 2000)
                 
                 st.session_state['calc_state'] = {
@@ -253,7 +278,7 @@ if mode == "1. Radial Wind Simulator":
         working_df = df.copy()
         
         plot_type = st.radio("Plot Type:", ["Scatter Plot", "Histogram"], horizontal=True)
-        options = ['l', 'b', 'V_LSR', 'V_GSR', 'd_Sun', 'x', 'y', 'z', 'R', 'θ', 'r', 'φ', 'V_x', 'V_y', 'V_z', 'V_R', 'V_r']
+        options = ['l', 'b', 'V_LSR', 'V_GSR', 'd_Sun', 'x', 'y', 'z', 'R', 'θ', 'r', 'φ', 'V_x', 'V_y', 'V_z', 'V_R', 'V_r', 'V_mag']
         
         # 1. Render Axis / Bin Settings
         if plot_type == "Scatter Plot":
@@ -315,6 +340,8 @@ if mode == "1. Radial Wind Simulator":
                 hover_data=['x', 'y', 'z']
             )
             fig_2d.update_traces(marker=dict(size=4, opacity=0.7))
+            
+            # Explicitly enable and style the vertical grid
             fig_2d.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(255, 255, 255, 0.2)')
         
         else: # Histogram
