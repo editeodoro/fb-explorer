@@ -1,6 +1,6 @@
 ####################################################################################################
-# Interactive FB modelling with StreamLit. 
-# Run it in browser with: 
+# Interactive FB modelling with StreamLit.
+# Run it in browser with:
 # > streamlit run FB_model.py
 ####################################################################################################
 
@@ -148,12 +148,12 @@ if mode == "1. Radial Wind Simulator":
         v_lsr = v_gsr - (v_c * np.sin(l_rad) * np.cos(b_rad))
         
         return pd.DataFrame({
-            'l': l_deg, 'b': b_deg, 
+            'l': l_deg, 'b': b_deg,
             'V_LSR': v_lsr, 'V_GSR': v_gsr,
             'd_Sun': d,
-            'x': x, 'y': y, 'z': z, 
+            'x': x, 'y': y, 'z': z,
             'R': R, 'θ': theta_deg, 'r': r, 'φ': phi_deg,
-            'V_x': Vx, 'V_y': Vy, 'V_z': Vz, 
+            'V_x': Vx, 'V_y': Vy, 'V_z': Vz,
             'V_R': V_R, 'V_r': V_r_sph
         })
 
@@ -197,16 +197,16 @@ if mode == "1. Radial Wind Simulator":
     # Render Fermi Bubbles using LOCKED parameters
     for z_c, s in [(plot_z0, 1), (-plot_z0, -1)]:
         bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(z_c, plot_a, plot_b, plot_c, s)
-        fig_wind.add_trace(go.Surface(x=bx_mesh, y=by_mesh, z=bz_mesh, 
-                                      colorscale=[[0, 'white'], [1, 'white']], 
+        fig_wind.add_trace(go.Surface(x=bx_mesh, y=by_mesh, z=bz_mesh,
+                                      colorscale=[[0, 'white'], [1, 'white']],
                                       opacity=0.1, showscale=False, hoverinfo='skip'))
 
     # Plot sample data only if calculation occurred
     if plot_sample is not None:
         fig_wind.add_trace(go.Scatter3d(
-            x=plot_sample['x'], y=plot_sample['y'], z=plot_sample['z'], 
+            x=plot_sample['x'], y=plot_sample['y'], z=plot_sample['z'],
             mode='markers',
-            marker=dict(size=3, color=plot_sample['V_LSR'], colorscale='RdBu_r', 
+            marker=dict(size=3, color=plot_sample['V_LSR'], colorscale='RdBu_r',
                         colorbar=dict(title="V_LSR"), opacity=0.8),
             name='Particles'
         ))
@@ -216,7 +216,7 @@ if mode == "1. Radial Wind Simulator":
     fig_wind.add_trace(go.Scatter3d(x=[plot_sun[0]], y=[plot_sun[1]], z=[plot_sun[2]], mode='markers+text', text=["Sun"], textposition="top center", textfont=dict(color='orange', size=14), marker=dict(size=12, color='orange'), showlegend=False))
 
     fig_wind.update_layout(scene=dict(aspectmode='manual', aspectratio=dict(x=1, y=1, z=1), xaxis=dict(range=[-limit, limit]), yaxis=dict(range=[-limit, limit]), zaxis=dict(range=[-limit, limit])), template="plotly_dark", height=600, margin=dict(l=0, r=0, b=0, t=0), uirevision='constant')
-    st.plotly_chart(fig_wind, use_container_width=True)
+    st.plotly_chart(fig_wind, width='stretch')
 
     # --- 2D SCATTER / HISTOGRAM PLOT (Isolated via st.fragment) ---
     @st.fragment
@@ -272,7 +272,7 @@ if mode == "1. Radial Wind Simulator":
             bin_size = (max_val - min_val) / bins if max_val > min_val else 1.0
             
             fig_2d = px.histogram(
-                working_df, x=h_col, 
+                working_df, x=h_col,
                 color_discrete_sequence=['#00FFFF']
             )
             fig_2d.update_traces(xbins=dict(start=min_val, end=max_val, size=bin_size), autobinx=False)
