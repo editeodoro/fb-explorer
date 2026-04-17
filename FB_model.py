@@ -175,15 +175,15 @@ if mode == "1. Radial Wind Simulator":
         else:
             st.error("Cannot calculate model: Minimum latitude must be less than or equal to Maximum latitude.")
 
-    # Fetch locked plotting parameters from state
+    # Fetch ONLY the data and particle N from the locked state
     cs = st.session_state['calc_state']
-    plot_a, plot_b, plot_c, plot_z0, plot_sun = cs['a'], cs['b'], cs['c'], cs['z0'], cs['sun_pos']
     plot_df = cs['data']
     plot_sample = cs['sample_data']
+    plot_N = cs['N']
 
     # --- 3D PARTICLE PLOT (Always Visible) ---
     if plot_df is not None:
-        st.subheader(f"3D Particle Distribution (N={cs['N']})")
+        st.subheader(f"3D Particle Distribution (N={plot_N})")
     else:
         st.subheader("3D Geometry Preview (No data calculated)")
 
@@ -194,14 +194,16 @@ if mode == "1. Radial Wind Simulator":
     for coords in [([ax_range, [0,0], [0,0]]), ([[0,0], ax_range, [0,0]]), ([[0,0], [0,0], ax_range])]:
         fig_wind.add_trace(go.Scatter3d(x=coords[0], y=coords[1], z=coords[2], mode='lines', line=dict(color='white', width=6), showlegend=False))
     
-    # Render Fermi Bubbles using LOCKED parameters
-    for z_c, s in [(plot_z0, 1), (-plot_z0, -1)]:
-        bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(z_c, plot_a, plot_b, plot_c, s)
-        fig_wind.add_trace(go.Surface(x=bx_mesh, y=by_mesh, z=bz_mesh,
-                                      colorscale=[[0, 'white'], [1, 'white']],
-                                      opacity=0.1, showscale=False, hoverinfo='skip'))
+    # USE THE LIVE VARIABLES (a, b, c, z0) HERE INSTEAD OF LOCKED STATE
+    for z_c, s in [(z0, 1), (-z0, -1)]:
+        bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(z_c, a, b, c, s)
+        fig_wind.add_trace(go.Surface(
+            x=bx_mesh, y=by_mesh, z=bz_mesh,
+            colorscale=[[0, 'white'], [1, 'white']],
+            opacity=0.1, showscale=False, hoverinfo='skip'
+        ))
 
-    # Plot sample data only if calculation occurred
+    # Plot sample data only if calculation occurred (remains locked)
     if plot_sample is not None:
         fig_wind.add_trace(go.Scatter3d(
             x=plot_sample['x'], y=plot_sample['y'], z=plot_sample['z'],
@@ -213,7 +215,13 @@ if mode == "1. Radial Wind Simulator":
 
     gx, gy = np.meshgrid(np.linspace(-limit, limit, 10), np.linspace(-limit, limit, 10))
     fig_wind.add_trace(go.Surface(x=gx, y=gy, z=np.zeros_like(gx), colorscale=[[0, 'blue'], [1, 'blue']], opacity=0.15, showscale=False, name='Galactic Plane'))
-    fig_wind.add_trace(go.Scatter3d(x=[plot_sun[0]], y=[plot_sun[1]], z=[plot_sun[2]], mode='markers+text', text=["Sun"], textposition="top center", textfont=dict(color='orange', size=14), marker=dict(size=12, color='orange'), showlegend=False))
+    
+    # USE THE LIVE sun_pos VARIABLE HERE
+    fig_wind.add_trace(go.Scatter3d(
+        x=[sun_pos[0]], y=[sun_pos[1]], z=[sun_pos[2]],
+        mode='markers+text', text=["Sun"], textposition="top center",
+        textfont=dict(color='orange', size=14), marker=dict(size=12, color='orange'), showlegend=False
+    ))
 
     fig_wind.update_layout(scene=dict(aspectmode='manual', aspectratio=dict(x=1, y=1, z=1), xaxis=dict(range=[-limit, limit]), yaxis=dict(range=[-limit, limit]), zaxis=dict(range=[-limit, limit])), template="plotly_dark", height=600, margin=dict(l=0, r=0, b=0, t=0), uirevision='constant')
     st.plotly_chart(fig_wind, width='stretch')
