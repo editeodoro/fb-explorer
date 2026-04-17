@@ -66,15 +66,15 @@ if mode == "1. Radial Wind Simulator":
     wind_profile = st.sidebar.radio("Velocity Profile", ["Constant Velocity Wind", "Accelerating Wind"])
     
     if wind_profile == "Constant Velocity Wind":
-        v_r_const = st.sidebar.number_input("Constant Radial Velocity (Vr) [km/s]", value=500.0)
+        v_r_const = st.sidebar.number_input("Constant Radial Velocity [km/s]", value=500.0)
         m_slope = 0.0
         v_r_max = 0.0
     else:
         v_r_const = 0.0
-        m_slope = st.sidebar.number_input("Acceleration Slope (m) [(km/s)/kpc]", value=125.0)
-        v_r_max = st.sidebar.number_input("Maximum Velocity (Vr_max) [km/s]", value=500.0)
+        m_slope = st.sidebar.number_input("Acceleration Slope [(km/s)/kpc]", value=125.0)
+        v_r_max = st.sidebar.number_input("Maximum Velocity [km/s]", value=500.0)
     
-    v_c = st.sidebar.number_input("Sun Circular Vel [km/s]", value=240.0, help="Used for LSR conversion")
+    v_c = st.sidebar.number_input("Sun Circular Velocity [km/s]", value=240.0, help="Used for LSR conversion")
     
     min_lat = st.sidebar.number_input("Minimum Latitude |b| [deg]", min_value=0.0, max_value=90.0, value=0.0)
     max_lat = st.sidebar.number_input("Maximum Latitude |b| [deg]", min_value=0.0, max_value=90.0, value=90.0)
