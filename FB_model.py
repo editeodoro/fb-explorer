@@ -80,19 +80,19 @@ mode = st.sidebar.radio("Select Mode:", ["1. Wind Simulator", "2. LOS Explorer"]
 
 st.sidebar.divider()
 
-with st.sidebar.expander("Bubble Geometry", expanded=True):
-    a = st.number_input("Vertical Semi-axis (a) [kpc]", key='a')
-    b = st.number_input("Lateral Semi-axis (b) [kpc]", key='b')
-    c = st.number_input("Lateral Semi-axis (c) [kpc]", key='c')
-    z0 = st.number_input("Center Offset (z0) [kpc]", key='z0')
-    az_angle = st.number_input("Azimuthal Rotation [deg]", key='az_angle', help="Rotates the bubble around the vertical Z-axis.")
+with st.sidebar.expander("Bubble Geometry", expanded=False):
+    a = st.number_input("Vertical Semi-axis (a) [kpc]", key='a', step=1.0)
+    b = st.number_input("Lateral Semi-axis (b) [kpc]", key='b', step=1.0)
+    c = st.number_input("Lateral Semi-axis (c) [kpc]", key='c', step=1.0)
+    z0 = st.number_input("Center Offset (z0) [kpc]", key='z0', step=1.0)
+    az_angle = st.number_input("Azimuthal Rotation [deg]", key='az_angle', , step=1.0, help="Rotates the bubble around the vertical Z-axis.")
 
 st.sidebar.divider()
 
-with st.sidebar.expander("Observer (Sun)", expanded=True):
-    sun_x = st.number_input("Sun X [kpc]", key='sun_x', format="%.3f")
-    sun_y = st.number_input("Sun Y [kpc]", key='sun_y', format="%.3f")
-    sun_z = st.number_input("Sun Z [kpc]", key='sun_z', format="%.3f")
+with st.sidebar.expander("Observer (Sun)", expanded=False):
+    sun_x = st.number_input("Sun X [kpc]", key='sun_x', format="%.3f", step=1.0)
+    sun_y = st.number_input("Sun Y [kpc]", key='sun_y', format="%.3f", step=1.0)
+    sun_z = st.number_input("Sun Z [kpc]", key='sun_z', format="%.3f", step=1.0)
     sun_pos = np.array([sun_x, sun_y, sun_z])
 
 # --- SHARED MATH FUNCTIONS ---
