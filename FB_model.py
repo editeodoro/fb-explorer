@@ -152,7 +152,7 @@ if mode == "1. Wind Simulator":
             bins = col2.number_input("Number of Bins", min_value=5, max_value=500, value=50, step=5)
             h_col = f"|{hist_var}|" if abs_hist else hist_var
 
-        mask_query = st.text_input("Filter data (e.g., `(x > 2) & (x < 4)` or `abs(V_LSR)>50)`:", value="")
+        mask_query = st.text_input("Filter data (e.g., `(x > 2) & (x < 4)` or `abs(V_LSR) > 50)`:", value="")
         if mask_query.strip():
             try:
                 working_df = working_df.query(mask_query)
