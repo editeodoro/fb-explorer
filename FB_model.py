@@ -15,7 +15,7 @@ st.set_page_config(layout="wide", page_title="Fermi Bubble Explorer")
 
 # --- INITIALIZE DEFAULT PARAMETERS IN SESSION STATE ---
 default_params = {
-    'a': 6.0, 'b': 4.0, 'c': 4.0, 'z0': 5.0, 'az_angle': 0.0,
+    'a': 6.0, 'b': 4.0, 'c': 4.0, 'z0': 5.0, 'polar_angle': 0.0, 'az_angle': 0.0,
     'sun_x': -8.275, 'sun_y': 0.0, 'sun_z': 0.0,
     'N': 5000,
     'distribution_mode': "Volume Filling",
@@ -39,12 +39,11 @@ if 'calc_state' not in st.session_state:
         'sample_data': None,
         'N': 0,
         'a': 6.0, 'b': 4.0, 'c': 4.0, 'z0': 5.0,
-        'az_angle': 0.0,
+        'polar_angle': 0.0, 'az_angle': 0.0,
         'sun_pos': np.array([-8.275, 0.0, 0.0])
     }
 
 # --- CALLBACK FOR CONFIG UPLOAD ---
-# This runs BEFORE the page renders, preventing the "widget already instantiated" error.
 def process_uploaded_config():
     uploaded_file = st.session_state.get('config_uploader')
     if uploaded_file is not None:
@@ -85,6 +84,7 @@ with st.sidebar.expander("Bubble Geometry", expanded=False):
     b = st.number_input("Lateral Semi-axis (b) [kpc]", key='b', step=1.0)
     c = st.number_input("Lateral Semi-axis (c) [kpc]", key='c', step=1.0)
     z0 = st.number_input("Center Offset (z0) [kpc]", key='z0', step=1.0)
+    polar_angle = st.number_input("Polar Tilt [deg]", key='polar_angle', step=1.0, help="Inclines the bubble from the vertical Z-axis.")
     az_angle = st.number_input("Azimuthal Rotation [deg]", key='az_angle', step=1.0, help="Rotates the bubble around the vertical Z-axis.")
 
 st.sidebar.divider()
@@ -96,19 +96,39 @@ with st.sidebar.expander("Observer (Sun)", expanded=False):
     sun_pos = np.array([sun_x, sun_y, sun_z])
 
 # --- SHARED MATH FUNCTIONS ---
-def get_ellipsoid_mesh(z_center, a_val, b_val, c_val, sign=1, angle_deg=0.0):
+def apply_rotation(x, y, z, polar_deg, az_deg, inverse=False):
+    """Applies a 3D rotation matrix: X-axis rotation (polar) then Z-axis rotation (azimuthal)."""
+    theta = np.radians(polar_deg)
+    gamma = np.radians(az_deg)
+    
+    c_t, s_t = np.cos(theta), np.sin(theta)
+    c_g, s_g = np.cos(gamma), np.sin(gamma)
+    
+    # Rx rotates around X (tilt), Rz rotates around Z (azimuth)
+    Rx = np.array([[1, 0, 0], [0, c_t, -s_t], [0, s_t, c_t]])
+    Rz = np.array([[c_g, -s_g, 0], [s_g, c_g, 0], [0, 0, 1]])
+    
+    R = Rz @ Rx
+    if inverse:
+        R = np.linalg.inv(R)
+        
+    x_rot = R[0,0]*x + R[0,1]*y + R[0,2]*z
+    y_rot = R[1,0]*x + R[1,1]*y + R[1,2]*z
+    z_rot = R[2,0]*x + R[2,1]*y + R[2,2]*z
+    
+    return x_rot, y_rot, z_rot
+
+def get_ellipsoid_mesh(z_center, a_val, b_val, c_val, sign=1, polar_deg=0.0, az_deg=0.0):
     u, v = np.mgrid[0:2*np.pi:40j, 0:np.pi:40j]
     x_mesh = b_val * np.cos(u) * np.sin(v)
     y_mesh = c_val * np.sin(u) * np.sin(v)
     z_mesh = z_center + a_val * np.cos(v)
     
-    gamma = np.radians(angle_deg)
-    x_rot = x_mesh * np.cos(gamma) - y_mesh * np.sin(gamma)
-    y_rot = x_mesh * np.sin(gamma) + y_mesh * np.cos(gamma)
-    
     if sign > 0: z_mesh[z_mesh < 0] = np.nan
     else: z_mesh[z_mesh > 0] = np.nan
-    return x_rot, y_rot, z_mesh
+    
+    x_rot, y_rot, z_rot = apply_rotation(x_mesh, y_mesh, z_mesh, polar_deg, az_deg)
+    return x_rot, y_rot, z_rot
 
 # ==========================================
 # MODE 1: Wind Simulator
@@ -143,10 +163,8 @@ if mode == "1. Wind Simulator":
         st.sidebar.error("Minimum latitude cannot be greater than Maximum latitude.")
 
     @st.cache_data
-    def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode, kinematic_model, az_angle):
+    def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode, kinematic_model, polar_angle, az_angle):
         particles_b = []
-        gamma = np.radians(az_angle)
-        cos_g, sin_g = np.cos(gamma), np.sin(gamma)
         
         while len(particles_b) < N:
             batch = max(N * 2, 500)
@@ -184,10 +202,8 @@ if mode == "1. Wind Simulator":
                 pts = np.vstack((x[valid_z_mask], y[valid_z_mask], z[valid_z_mask])).T
             
             if len(pts) > 0:
-                pts_g = np.empty_like(pts)
-                pts_g[:,0] = pts[:,0] * cos_g - pts[:,1] * sin_g
-                pts_g[:,1] = pts[:,0] * sin_g + pts[:,1] * cos_g
-                pts_g[:,2] = pts[:,2]
+                pts_g_x, pts_g_y, pts_g_z = apply_rotation(pts[:,0], pts[:,1], pts[:,2], polar_angle, az_angle)
+                pts_g = np.vstack((pts_g_x, pts_g_y, pts_g_z)).T
                 
                 d_vec_temp = pts_g - sun_pos
                 d_temp = np.linalg.norm(d_vec_temp, axis=1)
@@ -233,13 +249,9 @@ if mode == "1. Wind Simulator":
             Vy_b = V_mag * (y_b / r_safe)
             Vz_b = V_mag * (z_b / r_safe)
         
-        x = x_b * cos_g - y_b * sin_g
-        y = x_b * sin_g + y_b * cos_g
-        z = z_b
-        
-        Vx = Vx_b * cos_g - Vy_b * sin_g
-        Vy = Vx_b * sin_g + Vy_b * cos_g
-        Vz = Vz_b
+        # Apply orientation to positions and velocities
+        x, y, z = apply_rotation(x_b, y_b, z_b, polar_angle, az_angle)
+        Vx, Vy, Vz = apply_rotation(Vx_b, Vy_b, Vz_b, polar_angle, az_angle)
         
         particles = np.vstack((x, y, z)).T
         
@@ -272,7 +284,7 @@ if mode == "1. Wind Simulator":
             'V_LSR': v_lsr, 'V_GSR': v_gsr,
             'd_Sun': d,
             'x': x, 'y': y, 'z': z,
-            'R': R, 'θ': theta_deg, 'r': r, 'φ': phi_deg,
+            'R': R, 'theta': theta_deg, 'r': r, 'phi': phi_deg,
             'V_x': Vx, 'V_y': Vy, 'V_z': Vz,
             'V_R': V_R, 'V_r': V_r, 'V_mag': V_mag
         })
@@ -280,14 +292,14 @@ if mode == "1. Wind Simulator":
     if st.sidebar.button("Calculate model", type="primary"):
         if min_lat <= max_lat:
             with st.spinner("Generating Wind Particles and Kinematics..."):
-                df_wind = generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, calc_v_r_const, calc_m_slope, calc_v_r_max, min_lat, max_lat, distribution_mode, kinematic_model, az_angle)
+                df_wind = generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, calc_v_r_const, calc_m_slope, calc_v_r_max, min_lat, max_lat, distribution_mode, kinematic_model, polar_angle, az_angle)
                 sample_size = min(N, 2000)
                 
                 st.session_state['calc_state'] = {
                     'data': df_wind,
                     'sample_data': df_wind.sample(sample_size),
                     'N': N,
-                    'a': a, 'b': b, 'c': c, 'z0': z0, 'az_angle': az_angle,
+                    'a': a, 'b': b, 'c': c, 'z0': z0, 'polar_angle': polar_angle, 'az_angle': az_angle,
                     'sun_pos': sun_pos
                 }
         else:
@@ -297,6 +309,7 @@ if mode == "1. Wind Simulator":
     plot_df = cs['data']
     plot_sample = cs['sample_data']
     plot_N = cs['N']
+    plot_pol = cs.get('polar_angle', 0.0)
     plot_az = cs.get('az_angle', 0.0)
 
     if plot_df is not None:
@@ -312,7 +325,9 @@ if mode == "1. Wind Simulator":
         fig_wind.add_trace(go.Scatter3d(x=coords[0], y=coords[1], z=coords[2], mode='lines', line=dict(color='white', width=6), showlegend=False))
     
     for z_c, s in [(z0, 1), (-z0, -1)]:
-        bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(z_c, a, b, c, s, plot_az if plot_df is not None else az_angle)
+        bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(z_c, a, b, c, s, 
+                                                       plot_pol if plot_df is not None else polar_angle, 
+                                                       plot_az if plot_df is not None else az_angle)
         fig_wind.add_trace(go.Surface(
             x=bx_mesh, y=by_mesh, z=bz_mesh,
             colorscale=[[0, 'white'], [1, 'white']],
@@ -349,7 +364,7 @@ if mode == "1. Wind Simulator":
         working_df = df.copy()
         
         plot_type = st.radio("Plot Type:", ["Scatter Plot", "Histogram"], horizontal=True)
-        options = ['l', 'b', 'V_LSR', 'V_GSR', 'd_Sun', 'x', 'y', 'z', 'R', 'θ', 'r', 'φ', 'V_x', 'V_y', 'V_z', 'V_R', 'V_r', 'V_mag']
+        options = ['l', 'b', 'V_LSR', 'V_GSR', 'd_Sun', 'x', 'y', 'z', 'R', 'theta', 'r', 'phi', 'V_x', 'V_y', 'V_z', 'V_R', 'V_r', 'V_mag']
         
         if plot_type == "Scatter Plot":
             col1, col2, col3 = st.columns(3)
@@ -440,20 +455,13 @@ elif mode == "2. LOS Explorer":
                 lat_val = st.number_input(f"b° (LOS {i+1})", min_value=-90.0, max_value=90.0, value=30.0 - (i*5), key=f"b{i}")
                 los_configs.append({'l': l_val, 'b': lat_val, 'color': colors[i]})
 
-        def calculate_intersections(S_gal, d_vec_gal, z_offset, angle_deg):
-            gamma = np.radians(angle_deg)
-            cos_g, sin_g = np.cos(gamma), np.sin(gamma)
+        def calculate_intersections(S_gal, d_vec_gal, z_offset, p_deg, a_deg):
+            # Apply the inverse rotation to map global rays into the bubble's unrotated local frame
+            S_x, S_y, S_z = apply_rotation(S_gal[0], S_gal[1], S_gal[2], p_deg, a_deg, inverse=True)
+            d_x, d_y, d_z = apply_rotation(d_vec_gal[0], d_vec_gal[1], d_vec_gal[2], p_deg, a_deg, inverse=True)
             
-            S = np.array([
-                S_gal[0] * cos_g + S_gal[1] * sin_g,
-                -S_gal[0] * sin_g + S_gal[1] * cos_g,
-                S_gal[2]
-            ])
-            d_vec_loc = np.array([
-                d_vec_gal[0] * cos_g + d_vec_gal[1] * sin_g,
-                -d_vec_gal[0] * sin_g + d_vec_gal[1] * cos_g,
-                d_vec_gal[2]
-            ])
+            S = np.array([S_x, S_y, S_z])
+            d_vec_loc = np.array([d_x, d_y, d_z])
             
             A = (d_vec_loc[0]**2 / b**2) + (d_vec_loc[1]**2 / c**2) + (d_vec_loc[2]**2 / a**2)
             B = 2 * ( (S[0]*d_vec_loc[0]/b**2) + (S[1]*d_vec_loc[1]/c**2) + (d_vec_loc[2]*(S[2]-z_offset)/a**2) )
@@ -465,6 +473,7 @@ elif mode == "2. LOS Explorer":
             valid = []
             for t in t_vals:
                 if t > 0:
+                    # Construct point using the original global directions
                     pt_gal = S_gal + t * d_vec_gal
                     if (z_offset > 0 and pt_gal[2] >= -0.01) or (z_offset < 0 and pt_gal[2] <= 0.01):
                         valid.append((t, pt_gal))
@@ -474,7 +483,8 @@ elif mode == "2. LOS Explorer":
         for i, config in enumerate(los_configs):
             l_rad, b_rad = np.radians(config['l']), np.radians(config['b'])
             d_vec = np.array([np.cos(b_rad)*np.cos(l_rad), np.cos(b_rad)*np.sin(l_rad), np.sin(b_rad)])
-            inters = sorted(calculate_intersections(sun_pos, d_vec, z0, az_angle) + calculate_intersections(sun_pos, d_vec, -z0, az_angle), key=lambda x: x[0])
+            inters = sorted(calculate_intersections(sun_pos, d_vec, z0, polar_angle, az_angle) + 
+                            calculate_intersections(sun_pos, d_vec, -z0, polar_angle, az_angle), key=lambda x: x[0])
             all_los_data.append({'id': i+1, 'config': config, 'd_vec': d_vec, 'inters': inters})
 
         fig = go.Figure()
@@ -487,7 +497,7 @@ elif mode == "2. LOS Explorer":
         fig.add_trace(go.Surface(x=gx, y=gy, z=np.zeros_like(gx), colorscale=[[0, 'blue'], [1, 'blue']], opacity=0.15, showscale=False))
 
         for z_c, s in [(z0, 1), (-z0, -1)]:
-            bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(z_c, a, b, c, s, az_angle)
+            bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(z_c, a, b, c, s, polar_angle, az_angle)
             fig.add_trace(go.Surface(x=bx_mesh, y=by_mesh, z=bz_mesh, colorscale=[[0, 'red'], [1, 'red']], opacity=0.2, showscale=False))
 
         for data in all_los_data:
