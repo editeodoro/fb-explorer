@@ -324,10 +324,15 @@ if mode == "1. Wind Simulator":
     for coords in [([ax_range, [0,0], [0,0]]), ([[0,0], ax_range, [0,0]]), ([[0,0], [0,0], ax_range])]:
         fig_wind.add_trace(go.Scatter3d(x=coords[0], y=coords[1], z=coords[2], mode='lines', line=dict(color='white', width=6), showlegend=False))
     
+        # Check if the live geometry is out of sync with the calculated particles
+    if plot_df is not None:
+        if (plot_pol != polar_angle or plot_az != az_angle or 
+            cs['a'] != a or cs['b'] != b or cs['c'] != c or cs['z0'] != z0):
+            st.warning("⚠️ Geometry altered. The plotted particles reflect the old configuration. Click 'Calculate model' to sync.")
+
+    # Always use the live sidebar variables for the geometry preview
     for z_c, s in [(z0, 1), (-z0, -1)]:
-        bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(z_c, a, b, c, s, 
-                                                       plot_pol if plot_df is not None else polar_angle, 
-                                                       plot_az if plot_df is not None else az_angle)
+        bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(z_c, a, b, c, s, polar_angle, az_angle)
         fig_wind.add_trace(go.Surface(
             x=bx_mesh, y=by_mesh, z=bz_mesh,
             colorscale=[[0, 'white'], [1, 'white']],
