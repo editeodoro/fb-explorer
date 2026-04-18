@@ -88,7 +88,7 @@ if mode == "1. Wind Simulator":
     wind_profile = st.sidebar.radio("Velocity Profile", ["Constant Velocity Wind", "Accelerating Wind"], key='wind_profile')
     
     if wind_profile == "Constant Velocity Wind":
-        calc_v_r_const = st.sidebar.number_input("Constant Radial Velocity", value=default_params['v_r_const']step=50, key='v_r_const')
+        calc_v_r_const = st.sidebar.number_input("Constant Radial Velocity", value=default_params['v_r_const'], step=50, key='v_r_const')
         calc_m_slope, calc_v_r_max = 0.0, 0.0
     else:
         calc_v_r_const = 0.0
