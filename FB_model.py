@@ -88,16 +88,16 @@ if mode == "1. Wind Simulator":
     wind_profile = st.sidebar.radio("Velocity Profile", ["Constant Velocity Wind", "Accelerating Wind"], key='wind_profile')
     
     if wind_profile == "Constant Velocity Wind":
-        calc_v_r_const = st.sidebar.number_input("Constant Radial Velocity", key='v_r_const')
+        calc_v_r_const = st.sidebar.number_input("Constant Radial Velocity", step=50, key='v_r_const')
         calc_m_slope, calc_v_r_max = 0.0, 0.0
     else:
         calc_v_r_const = 0.0
-        calc_m_slope = st.sidebar.number_input("Acceleration Slope", key='m_slope')
-        calc_v_r_max = st.sidebar.number_input("Maximum Velocity", key='v_r_max')
+        calc_m_slope = st.sidebar.number_input("Acceleration Slope", step=10, key='m_slope')
+        calc_v_r_max = st.sidebar.number_input("Maximum Velocity", step=50, key='v_r_max')
     
-    v_c = st.sidebar.number_input("Sun Circular Velocity", key='v_c')
-    min_lat = st.sidebar.number_input("Minimum Latitude |b|", min_value=0.0, max_value=90.0, key='min_lat')
-    max_lat = st.sidebar.number_input("Maximum Latitude |b|", min_value=0.0, max_value=90.0, key='max_lat')
+    v_c = st.sidebar.number_input("Sun Circular Velocity", key='v_c', step=10)
+    min_lat = st.sidebar.number_input("Minimum Latitude |b|", min_value=0.0, max_value=90.0, step=10, key='min_lat')
+    max_lat = st.sidebar.number_input("Maximum Latitude |b|", min_value=0.0, max_value=90.0, step=10, key='max_lat')
 
     if min_lat > max_lat:
         st.sidebar.error("Minimum latitude cannot be greater than Maximum latitude.")
