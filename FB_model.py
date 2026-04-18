@@ -84,8 +84,8 @@ with st.sidebar.expander("Bubble Geometry", expanded=False):
     b = st.number_input("Lateral Semi-axis (b) [kpc]", key='b', step=1.0)
     c = st.number_input("Lateral Semi-axis (c) [kpc]", key='c', step=1.0)
     z0 = st.number_input("Center Offset (z0) [kpc]", key='z0', step=1.0)
-    polar_angle = st.number_input("Polar Tilt [deg]", key='polar_angle', step=1.0, help="Inclines the bubble from the vertical Z-axis.")
-    az_angle = st.number_input("Azimuthal Rotation [deg]", key='az_angle', step=1.0, help="Rotates the bubble around the vertical Z-axis.")
+    polar_angle = st.number_input("Polar Tilt [deg]", key='polar_angle', step=10.0, help="Inclines the bubble from the vertical Z-axis.")
+    az_angle = st.number_input("Azimuthal Rotation [deg]", key='az_angle', step=10.0, help="Rotates the bubble around the vertical Z-axis.")
 
 st.sidebar.divider()
 
