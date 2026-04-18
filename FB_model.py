@@ -96,8 +96,8 @@ if mode == "1. Wind Simulator":
         calc_v_r_max = st.sidebar.number_input("Maximum Velocity", step=50, key='v_r_max')
     
     v_c = st.sidebar.number_input("Sun Circular Velocity", key='v_c', step=10)
-    min_lat = st.sidebar.number_input("Minimum Latitude |b|", min_value=0.0, max_value=90.0, step=10, key='min_lat')
-    max_lat = st.sidebar.number_input("Maximum Latitude |b|", min_value=0.0, max_value=90.0, step=10, key='max_lat')
+    min_lat = st.sidebar.number_input("Minimum Latitude |b|", min_value=0.0, max_value=90.0, key='min_lat')
+    max_lat = st.sidebar.number_input("Maximum Latitude |b|", min_value=0.0, max_value=90.0, key='max_lat')
 
     if min_lat > max_lat:
         st.sidebar.error("Minimum latitude cannot be greater than Maximum latitude.")
