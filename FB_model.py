@@ -192,7 +192,7 @@ if mode == "1. Wind Simulator":
             
         st.divider()
         st.subheader("Export Particle Data")
-        csv_data = working_df[options].to_csv(index=False, float_format='%.3g').encode('utf-8')
+        csv_data = working_df[plot_options].to_csv(index=False, float_format='%.3g').encode('utf-8')
         st.download_button("Download Masked Data as CSV", data=csv_data, file_name="simulated_wind_particles_masked.csv", mime="text/csv")
     
     if plot_df is not None:
