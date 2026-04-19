@@ -7,34 +7,35 @@ from geometry import apply_rotation
 def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode, density_profile, kinematic_model, polar_angle, az_angle):
     particles_b = []
     
+    # 1. FAILSAFE: Prevent infinite loops if latitude limits are too strict
+    attempts = 0
+    max_attempts = 1000 
+    
     while len(particles_b) < N:
+        attempts += 1
+        if attempts > max_attempts:
+            st.warning(f"⚠️ Latitude limits too restrictive! Only found {len(particles_b)} particles out of {N}.")
+            break
+
         batch = max(N * 2, 500)
         
         if distribution_mode == "Volume Filling":
             if density_profile == "Constant per Z-bin":
-                # Sample z analytically in the local bubble frames
                 is_north = np.random.rand(batch) > 0.5
                 z_prime = np.random.uniform(-a, a, batch)
                 
-                # Determine ellipse scaling at that height
                 r_xy = np.sqrt(1 - (z_prime/a)**2)
-                
-                # Sample uniformly in the XY cross-section
                 rho = np.sqrt(np.random.uniform(0, 1, batch))
                 phi = np.random.uniform(0, 2*np.pi, batch)
                 
                 x = b * r_xy * rho * np.cos(phi)
                 y = c * r_xy * rho * np.sin(phi)
-                
-                # Shift Z to the global frame (+z0 for North, -z0 for South)
                 z = np.where(is_north, z_prime + z0, z_prime - z0)
                 
-                # Ensure they stay in their respective hemispheres
                 valid_z_mask = (is_north & (z >= 0)) | (~is_north & (z <= 0))
                 pts = np.vstack((x[valid_z_mask], y[valid_z_mask], z[valid_z_mask])).T
                 
             else:
-                # Existing "Constant per Volume" rejection sampling
                 x = np.random.uniform(-b, b, batch)
                 y = np.random.uniform(-c, c, batch)
                 z = np.random.uniform(-(a+z0), a+z0, batch)
@@ -62,7 +63,11 @@ def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_cons
             
             d_vec_temp = pts_g - sun_pos
             d_temp = np.linalg.norm(d_vec_temp, axis=1)
-            b_deg_temp = np.degrees(np.arcsin(d_vec_temp[:,2] / d_temp))
+            d_temp_safe = np.maximum(d_temp, 1e-9) # Prevent division by zero
+            
+            # 2. FAILSAFE: Clip values to strictly [-1, 1] to prevent arcsin NaN errors
+            z_ratio = np.clip(d_vec_temp[:,2] / d_temp_safe, -1.0, 1.0)
+            b_deg_temp = np.degrees(np.arcsin(z_ratio))
             
             valid_mask = (np.abs(b_deg_temp) >= min_lat) & (np.abs(b_deg_temp) <= max_lat)
             particles_b.extend(pts[valid_mask])
@@ -71,6 +76,14 @@ def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_cons
             particles_b = particles_b[:N]
             break
             
+    # 3. FAILSAFE: If no particles are found, return an empty DataFrame to avoid IndexError
+    if len(particles_b) == 0:
+        st.error("No particles exist in this latitude range with the current geometry. Widening the latitude limits.")
+        return pd.DataFrame(columns=[
+            'l', 'b', 'V_LSR', 'V_GSR', 'd_Sun', 'x', 'y', 'z', 'R', 'theta', 'r', 'phi',
+            'V_x', 'V_y', 'V_z', 'V_R', 'V_r', 'V_mag'
+        ])
+            
     particles_b = np.array(particles_b)
     x_b, y_b, z_b = particles_b[:,0], particles_b[:,1], particles_b[:,2]
     
@@ -78,7 +91,7 @@ def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_cons
     r_safe = np.maximum(r, 1e-9)
 
     if wind_profile == "Constant Velocity Wind":
-        V_mag = np.full(N, v_r_const)
+        V_mag = np.full(len(particles_b), v_r_const)
     else:
         V_mag = np.minimum(m_slope * r_safe, v_r_max)
     
@@ -111,7 +124,7 @@ def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_cons
     v_gsr = np.sum(np.vstack((Vx, Vy, Vz)).T * (d_vec / d[:, np.newaxis]), axis=1)
     
     l_rad = np.arctan2(d_vec[:,1], d_vec[:,0])
-    b_rad = np.arcsin(d_vec[:,2] / d)
+    b_rad = np.arcsin(np.clip(d_vec[:,2] / np.maximum(d, 1e-9), -1.0, 1.0))
     
     l_deg = ((np.degrees(l_rad) + 180) % 360) - 180
     b_deg = np.degrees(b_rad)
