@@ -22,15 +22,26 @@ def apply_rotation(x, y, z, polar_deg, az_deg, inverse=False):
     
     return x_rot, y_rot, z_rot
 
-def get_ellipsoid_mesh(z_center, a_val, b_val, c_val, sign=1, polar_deg=0.0, az_deg=0.0):
-    u, v = np.mgrid[0:2*np.pi:40j, 0:np.pi:40j]
+def get_ellipsoid_mesh(z_center, a_val, b_val, c_val, sign, polar_deg=0.0, az_deg=0.0):
+    # 1. Calculate the exact angle where the bubble intersects the local z=0 plane
+    # Equation: z_center + a_val * cos(v) = 0
+    cos_v_cut = np.clip(-z_center / a_val, -1.0, 1.0)
+    v_cut = np.arccos(cos_v_cut)
+    
+    # 2. Set mesh boundaries depending on whether it's the North or South bubble
+    if sign > 0:
+        v_start, v_end = 0.0, v_cut      # North: From top down to the cut
+    else:
+        v_start, v_end = v_cut, np.pi    # South: From the cut down to the bottom
+        
+    # 3. Generate the mesh perfectly up to the cut (no NaN masking needed)
+    u, v = np.mgrid[0:2*np.pi:40j, v_start:v_end:40j]
+    
     x_mesh = b_val * np.cos(u) * np.sin(v)
     y_mesh = c_val * np.sin(u) * np.sin(v)
     z_mesh = z_center + a_val * np.cos(v)
     
-    if sign > 0: z_mesh[z_mesh < 0] = np.nan
-    else: z_mesh[z_mesh > 0] = np.nan
-    
+    # 4. Apply user rotations
     x_rot, y_rot, z_rot = apply_rotation(x_mesh, y_mesh, z_mesh, polar_deg, az_deg)
     return x_rot, y_rot, z_rot
 
