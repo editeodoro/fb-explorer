@@ -82,7 +82,7 @@ live_params = {'a': a, 'b': b, 'c': c, 'z0': z0, 'polar_angle': polar_angle, 'az
 # ==========================================
 if mode == "1. Wind Simulator":
     st.sidebar.divider()
-    st.sidebar.header("Wind Kinematics")
+    st.sidebar.header("💨 Wind Kinematics")
     N = st.sidebar.number_input("Number of Particles (N)", min_value=1, max_value=200000, step=500, key='N')
     
     distribution_mode = st.sidebar.radio("Particle Distribution", ["Volume Filling", "Edge Confined"], key='distribution_mode')
@@ -189,12 +189,24 @@ if mode == "1. Wind Simulator":
         else:
             if abs_hist: working_df[h_col] = working_df[hist_var].abs()
             st.plotly_chart(create_2d_histogram(working_df, h_col, bins), use_container_width=True)
-            
+        
+        # Export Particle data
         st.divider()
         st.subheader("Export Particle Data")
-        csv_data = working_df[plot_options].to_csv(index=False, float_format='%.3g').encode('utf-8')
-        st.download_button("Download Masked Data as CSV", data=csv_data, file_name="simulated_wind_particles_masked.csv", mime="text/csv")
-    
+
+        export_masked = st.checkbox("Export masked data", value=False)
+        if export_masked:
+            export_df = working_df[plot_options]
+            export_filename = "simulated_wind_particles_masked.csv"
+        else:
+            export_df = df[plot_options]
+            export_filename = "simulated_wind_particles.csv"
+
+        csv_data = export_df.to_csv(index=False, float_format='%.3g').encode('utf-8')
+
+        st.download_button(label="💾 Download Data as CSV", \
+                           data=csv_data, file_name=export_filename, mime="text/csv")
+
     if plot_df is not None:
         render_2d_analysis_plot(plot_df)
     else:
@@ -253,7 +265,7 @@ elif mode == "2. LOS Explorer":
 # CONFIG MANAGER
 # ==========================================
 st.sidebar.divider()
-st.sidebar.title("⚙️ Config Manager")
+st.sidebar.header("⚙️ Config Manager")
 st.sidebar.file_uploader("Import Parameters (.txt)", type=["txt"], key='config_uploader', on_change=process_uploaded_config)
 
 current_params = {k: st.session_state[k] for k in default_params.keys()}

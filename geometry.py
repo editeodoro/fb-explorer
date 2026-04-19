@@ -34,7 +34,7 @@ def get_ellipsoid_mesh(z_center, a_val, b_val, c_val, sign, polar_deg=0.0, az_de
     else:
         v_start, v_end = v_cut, np.pi    # South: From the cut down to the bottom
         
-    # 3. Generate the mesh perfectly up to the cut (no NaN masking needed)
+    # 3. Generate the mesh perfectly up to the cut
     u, v = np.mgrid[0:2*np.pi:40j, v_start:v_end:40j]
     
     x_mesh = b_val * np.cos(u) * np.sin(v)
