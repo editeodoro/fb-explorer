@@ -4,21 +4,45 @@ import streamlit as st
 from geometry import apply_rotation
 
 @st.cache_data
-def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode, kinematic_model, polar_angle, az_angle):
+def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode, density_profile, kinematic_model, polar_angle, az_angle):
     particles_b = []
     
     while len(particles_b) < N:
         batch = max(N * 2, 500)
         
         if distribution_mode == "Volume Filling":
-            x = np.random.uniform(-b, b, batch)
-            y = np.random.uniform(-c, c, batch)
-            z = np.random.uniform(-(a+z0), a+z0, batch)
-            
-            mask_N = (x**2/b**2 + y**2/c**2 + (z-z0)**2/a**2 <= 1) & (z >= 0)
-            mask_S = (x**2/b**2 + y**2/c**2 + (z+z0)**2/a**2 <= 1) & (z <= 0)
-            
-            pts = np.vstack((x[mask_N | mask_S], y[mask_N | mask_S], z[mask_N | mask_S])).T
+            if density_profile == "Constant per Z-bin":
+                # Sample z analytically in the local bubble frames
+                is_north = np.random.rand(batch) > 0.5
+                z_prime = np.random.uniform(-a, a, batch)
+                
+                # Determine ellipse scaling at that height
+                r_xy = np.sqrt(1 - (z_prime/a)**2)
+                
+                # Sample uniformly in the XY cross-section
+                rho = np.sqrt(np.random.uniform(0, 1, batch))
+                phi = np.random.uniform(0, 2*np.pi, batch)
+                
+                x = b * r_xy * rho * np.cos(phi)
+                y = c * r_xy * rho * np.sin(phi)
+                
+                # Shift Z to the global frame (+z0 for North, -z0 for South)
+                z = np.where(is_north, z_prime + z0, z_prime - z0)
+                
+                # Ensure they stay in their respective hemispheres
+                valid_z_mask = (is_north & (z >= 0)) | (~is_north & (z <= 0))
+                pts = np.vstack((x[valid_z_mask], y[valid_z_mask], z[valid_z_mask])).T
+                
+            else:
+                # Existing "Constant per Volume" rejection sampling
+                x = np.random.uniform(-b, b, batch)
+                y = np.random.uniform(-c, c, batch)
+                z = np.random.uniform(-(a+z0), a+z0, batch)
+                
+                mask_N = (x**2/b**2 + y**2/c**2 + (z-z0)**2/a**2 <= 1) & (z >= 0)
+                mask_S = (x**2/b**2 + y**2/c**2 + (z+z0)**2/a**2 <= 1) & (z <= 0)
+                
+                pts = np.vstack((x[mask_N | mask_S], y[mask_N | mask_S], z[mask_N | mask_S])).T
         else:
             u, v, w = np.random.normal(0, 1, batch), np.random.normal(0, 1, batch), np.random.normal(0, 1, batch)
             norm = np.sqrt(u**2 + v**2 + w**2)

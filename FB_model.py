@@ -18,7 +18,9 @@ st.set_page_config(layout="wide", page_title="Fermi Bubble Explorer")
 default_params = {
     'a': 6.0, 'b': 4.0, 'c': 4.0, 'z0': 5.0, 'polar_angle': 0.0, 'az_angle': 0.0,
     'sun_x': -8.275, 'sun_y': 0.0, 'sun_z': 0.0, 'N': 5000,
-    'distribution_mode': "Volume Filling", 'kinematic_model': "Radial Outflow",
+    'distribution_mode': "Volume Filling", 
+    'density_profile': "Constant per Volume", # <-- NEW PARAMETER
+    'kinematic_model': "Radial Outflow",
     'wind_profile': "Constant Velocity Wind", 'v_r_const': 500.0,
     'm_slope': 125.0, 'v_r_max': 500.0, 'v_c': 240.0, 'min_lat': 0.0, 'max_lat': 90.0
 }
@@ -84,6 +86,12 @@ if mode == "1. Wind Simulator":
     N = st.sidebar.number_input("Number of Particles (N)", min_value=1, max_value=200000, step=500, key='N')
     
     distribution_mode = st.sidebar.radio("Particle Distribution", ["Volume Filling", "Edge Confined"], key='distribution_mode')
+    if distribution_mode == "Volume Filling":
+        density_profile = st.sidebar.radio("Density Profile", 
+                ["Constant per Volume", "Constant per Z-bin"], key='density_profile')
+    else:
+        density_profile = "N/A"
+    
     kinematic_model = st.sidebar.radio("Flow Geometry", ["Radial Outflow", "Ellipsoidal Streamlines"], key='kinematic_model')
     wind_profile = st.sidebar.radio("Velocity Profile", ["Constant Velocity Wind", "Accelerating Wind"], key='wind_profile')
     
@@ -105,7 +113,9 @@ if mode == "1. Wind Simulator":
     if st.sidebar.button("Calculate model", type="primary"):
         if min_lat <= max_lat:
             with st.spinner("Generating Wind Particles..."):
-                df_wind = generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, calc_v_r_const, calc_m_slope, calc_v_r_max, min_lat, max_lat, distribution_mode, kinematic_model, polar_angle, az_angle)
+                df_wind = generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, calc_v_r_const, calc_m_slope, \
+                                                  calc_v_r_max, min_lat, max_lat, distribution_mode, density_profile, kinematic_model, \
+                                                  polar_angle, az_angle)
                 st.session_state['calc_state'] = {
                     'data': df_wind, 'sample_data': df_wind.sample(min(N, 2000)), 'N': N,
                     **live_params, 'sun_pos': sun_pos
