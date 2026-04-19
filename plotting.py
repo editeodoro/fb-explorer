@@ -4,7 +4,7 @@ from plotly.subplots import make_subplots
 import plotly.express as px
 from geometry import get_ellipsoid_mesh
 
-def create_3d_wind_plot(plot_sample, live_params, sun_pos):
+def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR'):
     fig_wind = go.Figure()
     limit = 15
     ax_range = [-limit, limit]
@@ -23,10 +23,13 @@ def create_3d_wind_plot(plot_sample, live_params, sun_pos):
 
     # Calculated Particles
     if plot_sample is not None:
+        # Choose a diverging palette for velocities, and a sequential one for spatial coordinates
+        cscale = 'RdBu_r' if 'V_' in color_col else 'Plasma'
+        
         fig_wind.add_trace(go.Scatter3d(
             x=plot_sample['x'], y=plot_sample['y'], z=plot_sample['z'],
             mode='markers',
-            marker=dict(size=3, color=plot_sample['V_LSR'], colorscale='RdBu_r', colorbar=dict(title="V_LSR"), opacity=0.8),
+            marker=dict(size=3, color=plot_sample[color_col], colorscale=cscale, colorbar=dict(title=color_col, x=-0.15), opacity=0.8),
             name='Particles'
         ))
 

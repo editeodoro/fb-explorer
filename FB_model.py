@@ -124,14 +124,21 @@ if mode == "1. Wind Simulator":
     cs = st.session_state['calc_state']
     plot_df = cs['data']
     
+    plot_options = ['l', 'b', 'V_LSR', 'V_GSR', 'd_Sun', 'x', 'y', 'z', 'R', 'theta', 'r', 'phi', 'V_x', 'V_y', 'V_z', 'V_R', 'V_r', 'V_mag']
+    
     if plot_df is not None:
         st.subheader(f"3D Particle Distribution (N={cs['N']})")
         if any(cs[k] != live_params[k] for k in live_params):
             st.warning("⚠️ Geometry altered. The plotted particles reflect the old configuration. Click 'Calculate model' to sync.")
+        
+        # Add the selector
+        color_col_3d = st.selectbox("Color 3D Particles By:", plot_options, index=plot_options.index('V_LSR'))
     else:
         st.subheader("3D Geometry Preview (No data calculated)")
+        color_col_3d = 'V_LSR' # Fallback for empty plot
 
-    fig_wind = create_3d_wind_plot(cs['sample_data'], live_params, sun_pos)
+    # Pass the selected color variable to the plotting function
+    fig_wind = create_3d_wind_plot(cs['sample_data'], live_params, sun_pos, color_col=color_col_3d)
     st.plotly_chart(fig_wind, width='stretch')
 
     # --- 2D SCATTER / HISTOGRAM ---
@@ -141,15 +148,14 @@ if mode == "1. Wind Simulator":
         st.subheader("Kinematic Analysis Plot")
         working_df = df.copy()
         plot_type = st.radio("Plot Type:", ["Scatter Plot", "Histogram"], horizontal=True)
-        options = ['l', 'b', 'V_LSR', 'V_GSR', 'd_Sun', 'x', 'y', 'z', 'R', 'theta', 'r', 'phi', 'V_x', 'V_y', 'V_z', 'V_R', 'V_r', 'V_mag']
         
         if plot_type == "Scatter Plot":
             col1, col2, col3 = st.columns(3)
-            x_axis = col1.selectbox("X-Axis", options, index=options.index('b'))
+            x_axis = col1.selectbox("X-Axis", plot_options, index=plot_options.index('b'))
             abs_x = col1.checkbox(f"Absolute |{x_axis}|", key='abs_x')
-            y_axis = col2.selectbox("Y-Axis", options, index=options.index('V_LSR'))
+            y_axis = col2.selectbox("Y-Axis", plot_options, index=plot_options.index('V_LSR'))
             abs_y = col2.checkbox(f"Absolute |{y_axis}|", key='abs_y')
-            color_var = col3.selectbox("Color By", options, index=options.index('l'))
+            color_var = col3.selectbox("Color By", plot_options, index=plot_options.index('l'))
             abs_c = col3.checkbox(f"Absolute |{color_var}|", key='abs_c')
             
             x_col = f"|{x_axis}|" if abs_x else x_axis
@@ -157,7 +163,7 @@ if mode == "1. Wind Simulator":
             c_col = f"|{color_var}|" if abs_c else color_var
         else:
             col1, col2 = st.columns(2)
-            hist_var = col1.selectbox("Quantity to Histogram", options, index=options.index('V_LSR'))
+            hist_var = col1.selectbox("Quantity to Histogram", plot_options, index=plot_options.index('V_LSR'))
             abs_hist = col1.checkbox(f"Absolute |{hist_var}|", key='abs_hist')
             bins = col2.number_input("Number of Bins", min_value=5, max_value=500, value=50, step=5)
             h_col = f"|{hist_var}|" if abs_hist else hist_var
