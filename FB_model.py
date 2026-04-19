@@ -82,7 +82,7 @@ live_params = {'a': a, 'b': b, 'c': c, 'z0': z0, 'polar_angle': polar_angle, 'az
 # ==========================================
 if mode == "1. Wind Simulator":
     st.sidebar.divider()
-    st.sidebar.header("💨 Wind Kinematics")
+    st.sidebar.header("☄️ Wind Kinematics")
     N = st.sidebar.number_input("Number of Particles (N)", min_value=1, max_value=200000, step=500, key='N')
     
     distribution_mode = st.sidebar.radio("Particle Distribution", ["Volume Filling", "Edge Confined"], key='distribution_mode')
