@@ -6,13 +6,20 @@ from geometry import get_ellipsoid_mesh
 
 
 def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR', selected_particles=None):
+    
     fig_wind = go.Figure()
     limit = 15
     ax_range = [-limit, limit]
     
     # Axes
-    for coords in [([ax_range, [0,0], [0,0]]), ([[0,0], ax_range, [0,0]]), ([[0,0], [0,0], ax_range])]:
-        fig_wind.add_trace(go.Scatter3d(x=coords[0], y=coords[1], z=coords[2], mode='lines', line=dict(color='white', width=6), showlegend=False))
+    x_axes = ax_range + [None, 0, 0, None, 0, 0]
+    y_axes = [0, 0, None] + ax_range + [None, 0, 0]
+    z_axes = [0, 0, None, 0, 0, None] + ax_range
+    fig_wind.add_trace(go.Scatter3d(
+        x=x_axes, y=y_axes, z=z_axes, 
+        mode='lines', line=dict(color='white', width=6), 
+        showlegend=False, hoverinfo='skip'
+    ))
     
     # Live Geometry Surface
     for z_c, s in [(live_params['z0'], 1), (-live_params['z0'], -1)]:
@@ -26,34 +33,21 @@ def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR', se
     if plot_sample is not None:
         cscale = 'RdBu_r' if 'V_' in color_col else 'Plasma'
         
-        # Plot the explicitly selected dataframe if it exists
         if selected_particles is not None and not selected_particles.empty:
-            
-            # 1. Plot the background sample (Unselected) very faint
+            # Unselected points (faint)
             fig_wind.add_trace(go.Scatter3d(
-                x=plot_sample['x'], y=plot_sample['y'], z=plot_sample['z'],
-                mode='markers',
-                marker=dict(size=2, color='gray', opacity=0.2),
-                name='Unselected',
-                hoverinfo='skip'
-            ))
+                x=plot_sample['x'], y=plot_sample['y'], z=plot_sample['z'], mode='markers', 
+                marker=dict(size=2, color='gray', opacity=0.2), name='Unselected',hoverinfo='skip'))
             
-            # 2. Plot exactly what was highlighted (Selected) bright
+            # Selected points (bright)
             fig_wind.add_trace(go.Scatter3d(
-                x=selected_particles['x'], y=selected_particles['y'], z=selected_particles['z'],
-                mode='markers',
+                x=selected_particles['x'], y=selected_particles['y'], z=selected_particles['z'],mode='markers',
                 marker=dict(
-                    size=5,
-                    color=selected_particles[color_col],
-                    colorscale=cscale,
-                    colorbar=dict(title=color_col, x=-0.15),
-                    opacity=1.0,
-                    line=dict(color='white', width=1)
-                ),
-                name='Selected'
-            ))
+                    size=5, color=selected_particles[color_col], colorscale=cscale,
+                    colorbar=dict(title=color_col, x=-0.15), opacity=1.0,
+                    line=dict(color='white', width=1)),name='Selected'))
         else:
-            # Default plotting if nothing is selected
+            # Default plotting
             fig_wind.add_trace(go.Scatter3d(
                 x=plot_sample['x'], y=plot_sample['y'], z=plot_sample['z'],
                 mode='markers',
@@ -61,12 +55,15 @@ def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR', se
                 name='Particles'
             ))
 
-    # Galactic Plane & Sun
-    gx, gy = np.meshgrid(np.linspace(-limit, limit, 10), np.linspace(-limit, limit, 10))
-    fig_wind.add_trace(go.Surface(x=gx, y=gy, z=np.zeros_like(gx), colorscale=[[0, 'blue'], [1, 'blue']], opacity=0.15, showscale=False, name='Galactic Plane'))
+    # Galactic Plane
+    gx, gy = np.meshgrid([-limit, limit], [-limit, limit])
+    fig_wind.add_trace(go.Surface(x=gx, y=gy, z=np.zeros_like(gx), colorscale=[[0, 'blue'], [1, 'blue']], opacity=0.15, showscale=False, name='Galactic Plane', hoverinfo='skip'))
+    
+    # Sun
     fig_wind.add_trace(go.Scatter3d(x=[sun_pos[0]], y=[sun_pos[1]], z=[sun_pos[2]], mode='markers+text', text=["Sun"], textposition="top center", textfont=dict(color='orange', size=14), marker=dict(size=12, color='orange'), showlegend=False))
-
-    fig_wind.update_layout(scene=dict(aspectmode='manual', aspectratio=dict(x=1, y=1, z=1), xaxis=dict(range=[-limit, limit]), yaxis=dict(range=[-limit, limit]), zaxis=dict(range=[-limit, limit])), template="plotly_dark", height=600, margin=dict(l=0, r=0, b=0, t=0), uirevision='constant')
+    
+    fig_wind.update_layout(scene=dict(aspectmode='manual', aspectratio=dict(x=1, y=1, z=1), xaxis=dict(range=[-limit, limit]), yaxis=dict(range=[-limit, limit]), zaxis=dict(range=[-limit, limit])), 
+                           template="plotly_dark", height=600, margin=dict(l=0, r=0, b=0, t=0), uirevision='constant')
     
     return fig_wind
 

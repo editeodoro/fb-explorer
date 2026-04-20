@@ -123,7 +123,7 @@ if mode == "1. Wind Simulator":
                                                   calc_v_r_max, min_lat, max_lat, distribution_mode, density_profile, kinematic_model, \
                                                   polar_angle, az_angle)
                 st.session_state['calc_state'] = {
-                    'data': df_wind, 'sample_data': df_wind.sample(min(N, 3000)), 'N': N, **live_params, 'sun_pos': sun_pos }
+                    'data': df_wind, 'sample_data': df_wind.sample(min(N, 2000)), 'N': N, **live_params, 'sun_pos': sun_pos }
 
     # Quantities that are calculated and can be plotted
     plot_options = ['l', 'b', 'V_LSR', 'V_GSR', 'd_Sun', 'x', 'y', 'z', 'R', 'theta', 'r', 'phi', 'V_x', 'V_y', 'V_z', 'V_R', 'V_r', 'V_mag']
@@ -152,7 +152,7 @@ if mode == "1. Wind Simulator":
     # Extract data using the predicted key for this exact run
     selected_particles_df = get_selected_particles(cs['sample_data'], st.session_state.get(expected_plot_key))    
     
-    if cs['N'] > 3000:
+    if cs['N'] > 2000:
         st.caption(f"Showing a representative sample of 3,000 particles (out of {cs['N']:,}) for 3D performance.")
         
     # Producing 3D plot
