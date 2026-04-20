@@ -4,7 +4,7 @@ from plotly.subplots import make_subplots
 import plotly.express as px
 from geometry import get_ellipsoid_mesh
 
-def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR'):
+def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR', selected_particles=None):
     fig_wind = go.Figure()
     limit = 15
     ax_range = [-limit, limit]
@@ -16,22 +16,49 @@ def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR'):
     # Live Geometry Surface
     for z_c, s in [(live_params['z0'], 1), (-live_params['z0'], -1)]:
         bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(
-            z_c, live_params['a'], live_params['b'], live_params['c'], s, 
+            z_c, live_params['a'], live_params['b'], live_params['c'], s,
             live_params['polar_angle'], live_params['az_angle']
         )
         fig_wind.add_trace(go.Surface(x=bx_mesh, y=by_mesh, z=bz_mesh, colorscale=[[0, 'white'], [1, 'white']], opacity=0.1, showscale=False, hoverinfo='skip'))
 
-    # Calculated Particles
+    # --- CALCULATED PARTICLES ---
     if plot_sample is not None:
-        # Choose a diverging palette for velocities, and a sequential one for spatial coordinates
         cscale = 'RdBu_r' if 'V_' in color_col else 'Plasma'
         
-        fig_wind.add_trace(go.Scatter3d(
-            x=plot_sample['x'], y=plot_sample['y'], z=plot_sample['z'],
-            mode='markers',
-            marker=dict(size=3, color=plot_sample[color_col], colorscale=cscale, colorbar=dict(title=color_col, x=-0.15), opacity=0.8),
-            name='Particles'
-        ))
+        # Plot the explicitly selected dataframe if it exists
+        if selected_particles is not None and not selected_particles.empty:
+            
+            # 1. Plot the background sample (Unselected) very faint
+            fig_wind.add_trace(go.Scatter3d(
+                x=plot_sample['x'], y=plot_sample['y'], z=plot_sample['z'],
+                mode='markers',
+                marker=dict(size=2, color='gray', opacity=0.2),
+                name='Unselected',
+                hoverinfo='skip'
+            ))
+            
+            # 2. Plot exactly what was highlighted (Selected) bright
+            fig_wind.add_trace(go.Scatter3d(
+                x=selected_particles['x'], y=selected_particles['y'], z=selected_particles['z'],
+                mode='markers',
+                marker=dict(
+                    size=5,
+                    color=selected_particles[color_col],
+                    colorscale=cscale,
+                    colorbar=dict(title=color_col, x=-0.15),
+                    opacity=1.0,
+                    line=dict(color='white', width=1)
+                ),
+                name='Selected'
+            ))
+        else:
+            # Default plotting if nothing is selected
+            fig_wind.add_trace(go.Scatter3d(
+                x=plot_sample['x'], y=plot_sample['y'], z=plot_sample['z'],
+                mode='markers',
+                marker=dict(size=3, color=plot_sample[color_col], colorscale=cscale, colorbar=dict(title=color_col, x=-0.15), opacity=0.8),
+                name='Particles'
+            ))
 
     # Galactic Plane & Sun
     gx, gy = np.meshgrid(np.linspace(-limit, limit, 10), np.linspace(-limit, limit, 10))
@@ -39,12 +66,28 @@ def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR'):
     fig_wind.add_trace(go.Scatter3d(x=[sun_pos[0]], y=[sun_pos[1]], z=[sun_pos[2]], mode='markers+text', text=["Sun"], textposition="top center", textfont=dict(color='orange', size=14), marker=dict(size=12, color='orange'), showlegend=False))
 
     fig_wind.update_layout(scene=dict(aspectmode='manual', aspectratio=dict(x=1, y=1, z=1), xaxis=dict(range=[-limit, limit]), yaxis=dict(range=[-limit, limit]), zaxis=dict(range=[-limit, limit])), template="plotly_dark", height=600, margin=dict(l=0, r=0, b=0, t=0), uirevision='constant')
+    
+    # THIS WAS MISSING!
     return fig_wind
 
+
 def create_2d_scatter_plot(working_df, x_col, y_col, c_col):
-    fig_2d = px.scatter(working_df, x=x_col, y=y_col, color=c_col, color_continuous_scale='RdBu_r', hover_data=['x', 'y', 'z'])
+    # Safely inject the pandas index as a real column
+    temp_df = working_df.copy()
+    temp_df['real_index'] = temp_df.index
+    
+    # Passing 'real_index' into custom_data is CRITICAL for the lasso tool to work
+    fig_2d = px.scatter(
+        temp_df,
+        x=x_col,
+        y=y_col,
+        color=c_col,
+        color_continuous_scale='RdBu_r',
+        hover_data=['x', 'y', 'z'],
+        custom_data=['real_index']  # <-- This links the 2D plot to the 3D plot
+    )
+    
     fig_2d.update_traces(marker=dict(size=4, opacity=0.7))
-    fig_2d.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(255, 255, 255, 0.2)')
     fig_2d.update_layout(template="plotly_dark", height=600)
     return fig_2d
 
@@ -69,7 +112,7 @@ def create_3d_los_plot(all_los_data, live_params, sun_pos):
 
     for z_c, s in [(live_params['z0'], 1), (-live_params['z0'], -1)]:
         bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(
-            z_c, live_params['a'], live_params['b'], live_params['c'], s, 
+            z_c, live_params['a'], live_params['b'], live_params['c'], s,
             live_params['polar_angle'], live_params['az_angle']
         )
         fig.add_trace(go.Surface(x=bx_mesh, y=by_mesh, z=bz_mesh, colorscale=[[0, 'red'], [1, 'red']], opacity=0.2, showscale=False))

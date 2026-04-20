@@ -18,7 +18,7 @@ st.set_page_config(layout="wide", page_title="Fermi Bubble Explorer")
 default_params = {
     'a': 6.0, 'b': 4.0, 'c': 4.0, 'z0': 5.0, 'polar_angle': 0.0, 'az_angle': 0.0,
     'sun_x': -8.275, 'sun_y': 0.0, 'sun_z': 0.0, 'N': 5000,
-    'distribution_mode': "Volume Filling", 
+    'distribution_mode': "Volume Filling",
     'density_profile': "Constant per Volume", # <-- NEW PARAMETER
     'kinematic_model': "Radial Outflow",
     'wind_profile': "Constant Velocity Wind", 'v_r_const': 500.0,
@@ -87,7 +87,7 @@ if mode == "1. Wind Simulator":
     
     distribution_mode = st.sidebar.radio("Particle Distribution", ["Volume Filling", "Edge Confined"], key='distribution_mode')
     if distribution_mode == "Volume Filling":
-        density_profile = st.sidebar.radio("Density Profile", 
+        density_profile = st.sidebar.radio("Density Profile",
                 ["Constant per Volume", "Constant per Z-bin"], key='density_profile')
     else:
         density_profile = "N/A"
@@ -117,10 +117,11 @@ if mode == "1. Wind Simulator":
                                                   calc_v_r_max, min_lat, max_lat, distribution_mode, density_profile, kinematic_model, \
                                                   polar_angle, az_angle)
                 st.session_state['calc_state'] = {
-                    'data': df_wind, 'sample_data': df_wind.sample(min(N, 2000)), 'N': N,
+                    'data': df_wind, 'sample_data': df_wind.sample(min(N, 3000)), 'N': N,
                     **live_params, 'sun_pos': sun_pos
                 }
 
+    
     cs = st.session_state['calc_state']
     plot_df = cs['data']
     
@@ -137,12 +138,64 @@ if mode == "1. Wind Simulator":
         st.subheader("3D Geometry Preview (No data calculated)")
         color_col_3d = 'V_LSR' # Fallback for empty plot
 
-    # Pass the selected color variable to the plotting function
-    fig_wind = create_3d_wind_plot(cs['sample_data'], live_params, sun_pos, color_col=color_col_3d)
-    st.plotly_chart(fig_wind, width='stretch')
+    selected_real_indices = []
+    if "scatter_2d_plot" in st.session_state:
+        try:
+            points = st.session_state.scatter_2d_plot["selection"]["points"]
+            selected_real_indices = [p["customdata"][0] for p in points]
+        except (KeyError, TypeError, AttributeError, IndexError):
+            pass
 
+   # 1. Extract the selected pandas indices safely
+    selected_particles_df = None
+    state = st.session_state.get("scatter_2d_plot")
+        
+    if state:
+        points = []
+        # Support for different Streamlit versions
+        if hasattr(state, "selection"):
+            points = state.selection.get("points", [])
+        elif isinstance(state, dict):
+            points = state.get("selection", {}).get("points", [])
+
+        if points:
+            try:
+                selected_real_indices = []
+                for p in points:
+                    if "customdata" in p:
+                        cd = p["customdata"]
+                        if isinstance(cd, list) and len(cd) > 0:
+                            selected_real_indices.append(cd[0])
+                        elif isinstance(cd, dict):
+                            val = cd.get("real_index") or list(cd.values())[0]
+                            selected_real_indices.append(val)
+                        else:
+                            selected_real_indices.append(cd)
+                    
+                # 2. Match selection against the active dataframe
+                if selected_real_indices and 'cs' in locals() and cs['sample_data'] is not None:
+                    master_df = cs['sample_data']
+                    selected_particles_df = master_df.loc[master_df.index.isin(selected_real_indices)]
+                    if not selected_particles_df.empty:
+                        st.success(f"🎯 Highlighted {len(selected_particles_df)} particles!")
+            except Exception as e:
+                st.error(f"⚠️ Data extraction failed: {e}")
+
+    if cs['N'] > 3000:
+        st.caption(f"Showing a representative sample of 3,000 particles (out of {cs['N']:,}) for 3D performance.")
+
+    # 3. Pass the result to the 3D plot
+    fig_wind = create_3d_wind_plot(
+            cs['sample_data'],
+            live_params,
+            sun_pos,
+            color_col=color_col_3d,
+            selected_particles=selected_particles_df
+    )
+    st.plotly_chart(fig_wind, width='stretch')
+        
     # --- 2D SCATTER / HISTOGRAM ---
-    @st.fragment
+    #@st.fragment
     def render_2d_analysis_plot(df):
         st.divider()
         st.subheader("Kinematic Analysis Plot")
@@ -185,10 +238,14 @@ if mode == "1. Wind Simulator":
             if abs_x: working_df[x_col] = working_df[x_axis].abs()
             if abs_y: working_df[y_col] = working_df[y_axis].abs()
             if abs_c: working_df[c_col] = working_df[color_var].abs()
-            st.plotly_chart(create_2d_scatter_plot(working_df, x_col, y_col, c_col), use_container_width=True)
+            
+            # --- NEW: Added on_select and key to capture the drawn box ---
+            st.plotly_chart(
+                create_2d_scatter_plot(working_df, x_col, y_col, c_col), width='stretch',
+                                       on_select="rerun", key="scatter_2d_plot")
         else:
             if abs_hist: working_df[h_col] = working_df[hist_var].abs()
-            st.plotly_chart(create_2d_histogram(working_df, h_col, bins), use_container_width=True)
+            st.plotly_chart(create_2d_histogram(working_df, h_col, bins), width='stretch')
         
         # Export Particle data
         st.divider()
@@ -234,13 +291,13 @@ elif mode == "2. LOS Explorer":
             l_rad, b_rad = np.radians(config['l']), np.radians(config['b'])
             d_vec = np.array([np.cos(b_rad)*np.cos(l_rad), np.cos(b_rad)*np.sin(l_rad), np.sin(b_rad)])
             inters = sorted(
-                calculate_intersections(sun_pos, d_vec, z0, polar_angle, az_angle, a, b, c) + 
-                calculate_intersections(sun_pos, d_vec, -z0, polar_angle, az_angle, a, b, c), 
+                calculate_intersections(sun_pos, d_vec, z0, polar_angle, az_angle, a, b, c) +
+                calculate_intersections(sun_pos, d_vec, -z0, polar_angle, az_angle, a, b, c),
                 key=lambda x: x[0]
             )
             all_los_data.append({'id': i+1, 'config': config, 'd_vec': d_vec, 'inters': inters})
 
-        st.plotly_chart(create_3d_los_plot(all_los_data, live_params, sun_pos), use_container_width=True)
+        st.plotly_chart(create_3d_los_plot(all_los_data, live_params, sun_pos), width='stretch')
 
         st.subheader("Combined Intersection Data")
         table_rows = []
@@ -259,7 +316,7 @@ elif mode == "2. LOS Explorer":
         active_inters = [d for d in all_los_data if len(d['inters']) >= 2]
         if active_inters:
             st.subheader("Unified Geometry Analysis")
-            st.plotly_chart(create_los_unified_plot(active_inters, sun_pos), use_container_width=True)
+            st.plotly_chart(create_los_unified_plot(active_inters, sun_pos), width='stretch')
 
 # ==========================================
 # CONFIG MANAGER
@@ -270,4 +327,4 @@ st.sidebar.file_uploader("Import Parameters (.txt)", type=["txt"], key='config_u
 
 current_params = {k: st.session_state[k] for k in default_params.keys()}
 export_lines = ["# Fermi Bubble Explorer Parameters", "# Exported Config"] + [f"{k}={v}" for k, v in current_params.items()]
-st.sidebar.download_button("Export Current Config", data="\n".join(export_lines), file_name="wind_model_parameters.txt", mime="text/plain", use_container_width=True)
+st.sidebar.download_button("Export Current Config", data="\n".join(export_lines), file_name="wind_model_parameters.txt", mime="text/plain", width='stretch')
