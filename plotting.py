@@ -2,69 +2,96 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
+import streamlit as st
 from geometry import get_ellipsoid_mesh
 
-
-def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR', selected_particles=None):
+@st.cache_data
+def get_base_geometry(live_params, sun_pos):
     
-    fig_wind = go.Figure()
+    """Generates the static environment once and caches it as a dictionary."""
+    fig_base = go.Figure()
     limit = 15
-    ax_range = [-limit, limit]
     
-    # Axes
-    x_axes = ax_range + [None, 0, 0, None, 0, 0]
-    y_axes = [0, 0, None] + ax_range + [None, 0, 0]
-    z_axes = [0, 0, None, 0, 0, None] + ax_range
-    fig_wind.add_trace(go.Scatter3d(
-        x=x_axes, y=y_axes, z=z_axes, 
-        mode='lines', line=dict(color='white', width=6), 
+    # Combined Axes and Sun
+    x_comb = [-limit, limit, None, 0, 0, None, 0, 0, None, sun_pos[0]]
+    y_comb = [0, 0, None, -limit, limit, None, 0, 0, None, sun_pos[1]]
+    z_comb = [0, 0, None, 0, 0, None, -limit, limit, None, sun_pos[2]]
+    
+    m_sizes = [0] * 9 + [12]
+    m_colors = ['white'] * 9 + ['orange']
+    t_labels = [""] * 9 + ["Sun"]
+
+    fig_base.add_trace(go.Scatter3d(
+        x=x_comb, y=y_comb, z=z_comb, mode='lines+markers+text',
+        line=dict(color='white', width=6), marker=dict(size=m_sizes, color=m_colors),
+        text=t_labels, textposition="top center", textfont=dict(color='orange', size=14),
         showlegend=False, hoverinfo='skip'
     ))
     
-    # Live Geometry Surface
+    # Galactic Plane
+    gx, gy = np.meshgrid([-limit, limit], [-limit, limit])
+    fig_base.add_trace(go.Surface(
+        x=gx, y=gy, z=np.zeros_like(gx), colorscale=[[0, 'blue'], [1, 'blue']], 
+        opacity=0.15, showscale=False, name='Galactic Plane', hoverinfo='skip'
+    ))
+
+    # Live Geometry Surface (Bubbles)
     for z_c, s in [(live_params['z0'], 1), (-live_params['z0'], -1)]:
         bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(
             z_c, live_params['a'], live_params['b'], live_params['c'], s,
             live_params['polar_angle'], live_params['az_angle']
         )
-        fig_wind.add_trace(go.Surface(x=bx_mesh, y=by_mesh, z=bz_mesh, colorscale=[[0, 'white'], [1, 'white']], opacity=0.1, showscale=False, hoverinfo='skip'))
+        fig_base.add_trace(go.Surface(
+            x=bx_mesh, y=by_mesh, z=bz_mesh, colorscale=[[0, 'white'], [1, 'white']], 
+            opacity=0.1, showscale=False, hoverinfo='skip'
+        ))
 
-    # --- CALCULATED PARTICLES ---
+    fig_base.update_layout(
+        scene=dict(aspectmode='manual', aspectratio=dict(x=1, y=1, z=1), 
+                   xaxis=dict(range=[-limit, limit]), yaxis=dict(range=[-limit, limit]), zaxis=dict(range=[-limit, limit])), 
+        template="plotly_dark", height=600, margin=dict(l=0, r=0, b=0, t=0), uirevision='constant'
+    )
+    
+    return fig_base.to_dict()
+    
+
+def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR', selected_particles=None):
+    
+    # 1. Load the pre-calculated base geometry
+    base_fig_dict = get_base_geometry(live_params, sun_pos)
+    
+    # 2. Reconstruct the figure 
+    fig_wind = go.Figure(base_fig_dict)
+
+    # 3. Add ONLY the dynamic particles
     if plot_sample is not None:
         cscale = 'RdBu_r' if 'V_' in color_col else 'Plasma'
         
         if selected_particles is not None and not selected_particles.empty:
-            # Unselected points (faint)
             fig_wind.add_trace(go.Scatter3d(
-                x=plot_sample['x'], y=plot_sample['y'], z=plot_sample['z'], mode='markers', 
-                marker=dict(size=2, color='gray', opacity=0.2), name='Unselected',hoverinfo='skip'))
+                x=plot_sample['x'], y=plot_sample['y'], z=plot_sample['z'],
+                mode='markers', marker=dict(size=2, color='gray', opacity=0.2),
+                name='Unselected', hoverinfo='skip'
+            ))
             
-            # Selected points (bright)
             fig_wind.add_trace(go.Scatter3d(
-                x=selected_particles['x'], y=selected_particles['y'], z=selected_particles['z'],mode='markers',
+                x=selected_particles['x'], y=selected_particles['y'], z=selected_particles['z'],
+                mode='markers',
                 marker=dict(
                     size=5, color=selected_particles[color_col], colorscale=cscale,
                     colorbar=dict(title=color_col, x=-0.15), opacity=1.0,
-                    line=dict(color='white', width=1)),name='Selected'))
+                    line=dict(color='white', width=1)
+                ),
+                name='Selected'
+            ))
         else:
-            # Default plotting
             fig_wind.add_trace(go.Scatter3d(
                 x=plot_sample['x'], y=plot_sample['y'], z=plot_sample['z'],
                 mode='markers',
                 marker=dict(size=3, color=plot_sample[color_col], colorscale=cscale, colorbar=dict(title=color_col, x=-0.15), opacity=0.8),
                 name='Particles'
             ))
-
-    # Galactic Plane
-    gx, gy = np.meshgrid([-limit, limit], [-limit, limit])
-    fig_wind.add_trace(go.Surface(x=gx, y=gy, z=np.zeros_like(gx), colorscale=[[0, 'blue'], [1, 'blue']], opacity=0.15, showscale=False, name='Galactic Plane', hoverinfo='skip'))
-    
-    # Sun
-    fig_wind.add_trace(go.Scatter3d(x=[sun_pos[0]], y=[sun_pos[1]], z=[sun_pos[2]], mode='markers+text', text=["Sun"], textposition="top center", textfont=dict(color='orange', size=14), marker=dict(size=12, color='orange'), showlegend=False))
-    
-    fig_wind.update_layout(scene=dict(aspectmode='manual', aspectratio=dict(x=1, y=1, z=1), xaxis=dict(range=[-limit, limit]), yaxis=dict(range=[-limit, limit]), zaxis=dict(range=[-limit, limit])), 
-                           template="plotly_dark", height=600, margin=dict(l=0, r=0, b=0, t=0), uirevision='constant')
-    
+        
     return fig_wind
 
 
@@ -100,7 +127,9 @@ def create_2d_histogram(working_df, h_col, bins):
 
 def create_3d_los_plot(all_los_data, live_params, sun_pos):
     
-    fig = create_3d_wind_plot(None, live_params, sun_pos)
+    base_fig_dict = get_base_geometry(live_params, sun_pos)
+    
+    fig = go.Figure(base_fig_dict)
     
     for data in all_los_data:
         l_end = sun_pos + 40 * data['d_vec']

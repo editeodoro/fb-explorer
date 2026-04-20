@@ -138,7 +138,7 @@ if mode == "1. Wind Simulator":
         # Show also models
         st.subheader(f"3D Particle Distribution (N={cs['N']})")
         if any(cs[k] != live_params[k] for k in live_params):
-            st.warning("⚠️ Geometry altered. The plotted particles reflect the old configuration. Click 'Calculate model' to sync.")
+            st.warning("⚠️ Geometry altered, particles h The plotted particles reflect the old configuration. Click 'Calculate model' to sync.")
 
         color_col_3d = st.selectbox("Color 3D Particles By:", plot_options, index=plot_options.index('V_LSR'))
     
