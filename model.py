@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 from geometry import apply_rotation
 
+
 @st.cache_data
 def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_const, m_slope, v_r_max, min_lat, max_lat, distribution_mode, density_profile, kinematic_model, polar_angle, az_angle):
     particles_b = []
