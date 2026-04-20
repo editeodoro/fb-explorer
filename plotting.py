@@ -4,6 +4,7 @@ from plotly.subplots import make_subplots
 import plotly.express as px
 from geometry import get_ellipsoid_mesh
 
+
 def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR', selected_particles=None):
     fig_wind = go.Figure()
     limit = 15
