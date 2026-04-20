@@ -4,9 +4,10 @@ import pandas as pd
 from geometry import calculate_intersections
 from plotting import create_3d_los_plot, create_los_unified_plot
 
-def LOS_explorer(sun_pos, bubble_geometry, live_params):
+def LOS_explorer(live_params):
     
-    a, b, c, z0, polar_angle, az_angle = bubble_geometry
+    a, b, c, z0, polar_angle, az_angle = (live_params[k] for k in ('a', 'b', 'c', 'z0', 'polar_angle', 'az_angle'))
+    sun_pos = np.array([live_params['sun_x'], live_params['sun_y'], live_params['sun_z']])
         
     with st.spinner("Rendering Sight-line Geometry..."):
         st.sidebar.divider()

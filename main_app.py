@@ -55,11 +55,11 @@ live_params = {'a': a, 'b': b, 'c': c, 'z0': z0, 'polar_angle': polar_angle, 'az
 # MODE 1: Wind Simulator
 # ==========================================
 if mode == "Wind Simulator":
-    wind_simulator(sun_pos, [a, b, c, z0, polar_angle, az_angle], live_params, default_params)
+    wind_simulator(live_params, default_params)
     
 # ==========================================
 # MODE 2: LOS Explorer
 # ==========================================
 elif mode == "LOS Explorer":
-    LOS_explorer(sun_pos, [a, b, c, z0, polar_angle, az_angle], live_params)
+    LOS_explorer(live_params)
 

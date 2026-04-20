@@ -25,11 +25,11 @@ def process_uploaded_config():
             st.error(f"Error parsing config file: {e}")
 
 
-def wind_simulator(sun_pos, bubble_geometry, live_params, default_params):
+def wind_simulator(live_params, default_params):
     
-    a, b, c, z0, polar_angle, az_angle = bubble_geometry
-    sun_v_c = st.session_state.get('v_c', default_params['v_c'])
-    
+    a, b, c, z0, polar_angle, az_angle, sun_v_c = (live_params[k] for k in ('a', 'b', 'c', 'z0', 'polar_angle', 'az_angle', 'v_c'))
+    sun_pos = np.array([live_params['sun_x'], live_params['sun_y'], live_params['sun_z']])
+
     if 'calc_state' not in st.session_state:
         st.session_state['calc_state'] = {'data': None, 'sample_data': None, 'N': 0, **live_params}
 
@@ -107,13 +107,7 @@ def wind_simulator(sun_pos, bubble_geometry, live_params, default_params):
         st.caption(f"Showing a representative sample of 2,000 particles (out of {cs['N']:,}) for 3D performance.")
         
     # Producing 3D plot
-    fig_wind = create_3d_wind_plot(
-            cs['sample_data'],
-            live_params,
-            sun_pos,
-            color_col=color_col_3d,
-            selected_particles=selected_particles_df
-    )
+    fig_wind = create_3d_wind_plot(cs['sample_data'],live_params,sun_pos,color_col_3d,selected_particles_df)
     st.plotly_chart(fig_wind, width='stretch')
     
     
