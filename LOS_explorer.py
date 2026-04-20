@@ -17,8 +17,8 @@ def LOS_explorer(sun_pos, bubble_geometry, live_params):
         colors = ['#FFFF00', '#00FF00', '#FF00FF', '#00FFFF', '#FFA500']
         for i in range(num_los):
             with st.sidebar.expander(f"Sight-line {i+1}", expanded=(i==0)):
-                l_val = st.number_input(f"l° (LOS {i+1})", -180.0, 180.0, 0.0, key=f"l{i}")
-                lat_val = st.number_input(f"b° (LOS {i+1})", -90.0, 90.0, 30.0 - (i*5), key=f"b{i}")
+                l_val = st.number_input(f"l° (LOS {i+1})", -180.0, 180.0, 0.0, step = 10.0, key=f"l{i}")
+                lat_val = st.number_input(f"b° (LOS {i+1})", -90.0, 90.0, 30.0 - (i*5), step = 10.0, key=f"b{i}")
                 los_configs.append({'l': l_val, 'b': lat_val, 'color': colors[i]})
 
         all_los_data = []

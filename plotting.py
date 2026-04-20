@@ -142,6 +142,7 @@ def create_3d_los_plot(all_los_data, live_params, sun_pos):
     
     return fig 
 
+
 def create_los_unified_plot(active_inters, sun_pos):
     unified_fig = make_subplots(specs=[[{"secondary_y": True}]])
     for data in active_inters:
@@ -158,4 +159,6 @@ def create_los_unified_plot(active_inters, sun_pos):
     unified_fig.update_layout(template="plotly_dark", height=500, hovermode="x unified")
     unified_fig.update_yaxes(title_text="Beta (degrees)", secondary_y=False)
     unified_fig.update_yaxes(title_text="Cos(Beta)", secondary_y=True)
+    unified_fig.update_xaxes(title_text="Distance from Sun (kpc)")
+    
     return unified_fig
