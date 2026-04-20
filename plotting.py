@@ -68,7 +68,6 @@ def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR', se
 
     fig_wind.update_layout(scene=dict(aspectmode='manual', aspectratio=dict(x=1, y=1, z=1), xaxis=dict(range=[-limit, limit]), yaxis=dict(range=[-limit, limit]), zaxis=dict(range=[-limit, limit])), template="plotly_dark", height=600, margin=dict(l=0, r=0, b=0, t=0), uirevision='constant')
     
-    # THIS WAS MISSING!
     return fig_wind
 
 
@@ -92,6 +91,7 @@ def create_2d_scatter_plot(working_df, x_col, y_col, c_col):
     fig_2d.update_layout(template="plotly_dark", height=600)
     return fig_2d
 
+
 def create_2d_histogram(working_df, h_col, bins):
     min_val, max_val = working_df[h_col].min(), working_df[h_col].max()
     bin_size = (max_val - min_val) / bins if max_val > min_val else 1.0
@@ -100,34 +100,20 @@ def create_2d_histogram(working_df, h_col, bins):
     fig_2d.update_layout(bargap=0.1, template="plotly_dark", height=600)
     return fig_2d
 
+
 def create_3d_los_plot(all_los_data, live_params, sun_pos):
-    fig = go.Figure()
-    limit = 15
-    ax_range = [-limit, limit]
     
-    for coords in [([ax_range, [0,0], [0,0]]), ([[0,0], ax_range, [0,0]]), ([[0,0], [0,0], ax_range])]:
-        fig.add_trace(go.Scatter3d(x=coords[0], y=coords[1], z=coords[2], mode='lines', line=dict(color='white', width=6), showlegend=False))
-        
-    gx, gy = np.meshgrid(np.linspace(-limit, limit, 10), np.linspace(-limit, limit, 10))
-    fig.add_trace(go.Surface(x=gx, y=gy, z=np.zeros_like(gx), colorscale=[[0, 'blue'], [1, 'blue']], opacity=0.15, showscale=False))
-
-    for z_c, s in [(live_params['z0'], 1), (-live_params['z0'], -1)]:
-        bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(
-            z_c, live_params['a'], live_params['b'], live_params['c'], s,
-            live_params['polar_angle'], live_params['az_angle']
-        )
-        fig.add_trace(go.Surface(x=bx_mesh, y=by_mesh, z=bz_mesh, colorscale=[[0, 'red'], [1, 'red']], opacity=0.2, showscale=False))
-
+    fig = create_3d_wind_plot(None, live_params, sun_pos)
+    
     for data in all_los_data:
         l_end = sun_pos + 40 * data['d_vec']
         fig.add_trace(go.Scatter3d(x=[sun_pos[0], l_end[0]], y=[sun_pos[1], l_end[1]], z=[sun_pos[2], l_end[2]], mode='lines', line=dict(color=data['config']['color'], width=5), name=f"LOS {data['id']}"))
         if data['inters']:
             pts = np.array([pt[1] for pt in data['inters']])
             fig.add_trace(go.Scatter3d(x=pts[:,0], y=pts[:,1], z=pts[:,2], mode='markers', marker=dict(size=6, color=data['config']['color'], symbol='diamond', line=dict(color='white', width=1)), showlegend=False))
-
-    fig.add_trace(go.Scatter3d(x=[sun_pos[0]], y=[sun_pos[1]], z=[sun_pos[2]], mode='markers+text', text=["Sun"], textposition="top center", textfont=dict(color='orange', size=14), marker=dict(size=12, color='orange', symbol='circle'), name='Sun'))
-    fig.update_layout(scene=dict(aspectmode='manual', aspectratio=dict(x=1, y=1, z=1), xaxis=dict(range=[-limit, limit]), yaxis=dict(range=[-limit, limit]), zaxis=dict(range=[-limit, limit])), template="plotly_dark", height=700, margin=dict(l=0, r=0, b=0, t=0), uirevision='constant')
-    return fig
+    
+    
+    return fig 
 
 def create_los_unified_plot(active_inters, sun_pos):
     unified_fig = make_subplots(specs=[[{"secondary_y": True}]])

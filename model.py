@@ -135,3 +135,50 @@ def generate_wind_particles(N, a, b, c, z0, sun_pos, v_c, wind_profile, v_r_cons
         'x': x, 'y': y, 'z': z, 'R': np.sqrt(x**2 + y**2), 'theta': theta_deg, 'r': r, 'phi': phi_deg,
         'V_x': Vx, 'V_y': Vy, 'V_z': Vz, 'V_R': V_R, 'V_r': V_r, 'V_mag': V_mag
     })
+
+
+def get_selected_particles(sample_df, state):
+    
+    selected_particles_df = None
+
+    if not state:
+        return None
+
+    # --- Extract points ---
+    if hasattr(state, "selection"):
+        points = state.selection.get("points", [])
+    elif isinstance(state, dict):
+        points = state.get("selection", {}).get("points", [])
+    else:
+        points = []
+
+    if not points:
+        return None
+
+    try:
+        selected_real_indices = []
+
+        for p in points:
+            cd = p.get("customdata")
+
+            if isinstance(cd, list) and len(cd) > 0:
+                selected_real_indices.append(cd[0])
+            elif isinstance(cd, dict):
+                selected_real_indices.append(
+                    cd.get("real_index") or list(cd.values())[0]
+                )
+            else:
+                selected_real_indices.append(cd)
+
+        if selected_real_indices and sample_df is not None:
+            selected_particles_df = sample_df.loc[
+                sample_df.index.isin(selected_real_indices)
+            ]
+
+            if not selected_particles_df.empty:
+                st.success(f"🎯 Highlighted {len(selected_particles_df)} particles!")
+
+    except Exception as e:
+        st.error(f"⚠️ Data extraction failed: {e}")
+
+    return selected_particles_df
