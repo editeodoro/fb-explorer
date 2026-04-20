@@ -12,12 +12,19 @@ def get_base_geometry(live_params, sun_pos):
     fig_base = go.Figure()
     limit = 15
     
+    # Galactic Plane
+    gx, gy = np.meshgrid([-limit, limit], [-limit, limit])
+    fig_base.add_trace(go.Surface(
+        x=gx, y=gy, z=np.zeros_like(gx), colorscale=[[0, 'blue'], [1, 'blue']], 
+        opacity=0.15, showscale=False, name='Galactic Plane', hoverinfo='skip'
+    ))
+    
     # Combined Axes and Sun
     x_comb = [-limit, limit, None, 0, 0, None, 0, 0, None, sun_pos[0]]
     y_comb = [0, 0, None, -limit, limit, None, 0, 0, None, sun_pos[1]]
     z_comb = [0, 0, None, 0, 0, None, -limit, limit, None, sun_pos[2]]
     
-    m_sizes = [0] * 9 + [12]
+    m_sizes = [0] * 9 + [20]
     m_colors = ['white'] * 9 + ['orange']
     t_labels = [""] * 9 + ["Sun"]
 
@@ -28,13 +35,6 @@ def get_base_geometry(live_params, sun_pos):
         showlegend=False, hoverinfo='skip'
     ))
     
-    # Galactic Plane
-    gx, gy = np.meshgrid([-limit, limit], [-limit, limit])
-    fig_base.add_trace(go.Surface(
-        x=gx, y=gy, z=np.zeros_like(gx), colorscale=[[0, 'blue'], [1, 'blue']], 
-        opacity=0.15, showscale=False, name='Galactic Plane', hoverinfo='skip'
-    ))
-
     # Live Geometry Surface (Bubbles)
     for z_c, s in [(live_params['z0'], 1), (-live_params['z0'], -1)]:
         bx_mesh, by_mesh, bz_mesh = get_ellipsoid_mesh(

@@ -13,7 +13,6 @@ from model import generate_wind_particles, get_selected_particles
 from plotting import create_3d_wind_plot, create_2d_scatter_plot, create_2d_histogram
 
 
-
 st.set_page_config(layout="wide", page_title="Fermi Bubble Explorer")
 
 # --- INITIALIZE DEFAULT PARAMETERS IN SESSION STATE ---
@@ -21,7 +20,7 @@ default_params = {
     'a': 6.0, 'b': 4.0, 'c': 4.0, 'z0': 5.0, 'polar_angle': 0.0, 'az_angle': 0.0,
     'sun_x': -8.275, 'sun_y': 0.0, 'sun_z': 0.0, 'N': 5000,
     'distribution_mode': "Volume Filling",
-    'density_profile': "Constant per Volume", # <-- NEW PARAMETER
+    'density_profile': "Constant per Volume", 
     'kinematic_model': "Radial Outflow",
     'wind_profile': "Constant Velocity Wind", 'v_r_const': 500.0,
     'm_slope': 125.0, 'v_r_max': 500.0, 'v_c': 240.0, 'min_lat': 0.0, 'max_lat': 90.0
@@ -59,7 +58,7 @@ def process_uploaded_config():
 
 # --- SIDEBAR ---
 st.sidebar.title("Simulation Mode")
-mode = st.sidebar.radio("Select Mode:", ["1. Wind Simulator", "2. LOS Explorer"], index=0)
+mode = st.sidebar.selectbox("Select Mode:", ["Wind Simulator", "LOS Explorer"], index=0)
 
 st.sidebar.divider()
 with st.sidebar.expander("Bubble Geometry", expanded=False):
@@ -82,7 +81,7 @@ live_params = {'a': a, 'b': b, 'c': c, 'z0': z0, 'polar_angle': polar_angle, 'az
 # ==========================================
 # MODE 1: Wind Simulator
 # ==========================================
-if mode == "1. Wind Simulator":
+if mode == "Wind Simulator":
     
     # Sidebar for wind kinematic parameters 
     st.sidebar.divider()
@@ -153,7 +152,7 @@ if mode == "1. Wind Simulator":
     
     expected_plot_key = f"scatter_2d_{curr_x_col}_{curr_y_col}"
     # Extract data using the predicted key for this exact run
-    selected_particles_df = get_selected_particles(cs['sample_data'], st.session_state.get(expected_plot_key))    
+    selected_particles_df = get_selected_particles(cs['sample_data'], st.session_state.get(expected_plot_key))
     
     if cs['N'] > 2000:
         st.caption(f"Showing a representative sample of 2,000 particles (out of {cs['N']:,}) for 3D performance.")
@@ -228,8 +227,12 @@ if mode == "1. Wind Simulator":
         # Export Particle data
         st.divider()
         st.subheader("Export Particle Data")
-
-        export_masked = st.checkbox("Export masked data", value=False)
+        
+        filter_active = len(mask_query.strip()) > 0
+        if not filter_active:
+            st.session_state["export_masked_state"] = False
+        
+        export_masked = st.checkbox("Export masked data", disabled = not filter_active, key="export_masked_state")
         if export_masked:
             export_df = working_df[plot_options]
             export_filename = "simulated_wind_particles_masked.csv"
@@ -262,6 +265,6 @@ if mode == "1. Wind Simulator":
 # ==========================================
 # MODE 2: LOS Explorer
 # ==========================================
-elif mode == "2. LOS Explorer":
+elif mode == "LOS Explorer":
     LOS_explorer(sun_pos, [a, b, c, z0, polar_angle, az_angle], live_params)
 
