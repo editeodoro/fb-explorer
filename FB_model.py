@@ -8,9 +8,7 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-
 from LOS_explorer import LOS_explorer
-
 from model import generate_wind_particles, get_selected_particles
 from plotting import create_3d_wind_plot, create_2d_scatter_plot, create_2d_histogram
 
