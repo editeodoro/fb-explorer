@@ -142,16 +142,21 @@ if mode == "1. Wind Simulator":
 
         color_col_3d = st.selectbox("Color 3D Particles By:", plot_options, index=plot_options.index('V_LSR'))
     
-    
     # If there is a selection in 2D plot, create selected particle dataframe
-    curr_x_col = f"|{curr_x_axis}|" if st.session_state.get('abs_x', False) else st.session_state.get('x_axis_sel', 'b')
-    curr_y_col = f"|{curr_y_axis}|" if st.session_state.get('abs_y', False) else st.session_state.get('y_axis_sel', 'V_LSR')
+    curr_x_axis = st.session_state.get('x_axis_sel', 'b')
+    curr_abs_x = st.session_state.get('abs_x', False)
+    curr_x_col = f"|{curr_x_axis}|" if curr_abs_x else curr_x_axis
+    
+    curr_y_axis = st.session_state.get('y_axis_sel', 'V_LSR')
+    curr_abs_y = st.session_state.get('abs_y', False)
+    curr_y_col = f"|{curr_y_axis}|" if curr_abs_y else curr_y_axis
+    
     expected_plot_key = f"scatter_2d_{curr_x_col}_{curr_y_col}"
     # Extract data using the predicted key for this exact run
     selected_particles_df = get_selected_particles(cs['sample_data'], st.session_state.get(expected_plot_key))    
     
     if cs['N'] > 2000:
-        st.caption(f"Showing a representative sample of 3,000 particles (out of {cs['N']:,}) for 3D performance.")
+        st.caption(f"Showing a representative sample of 2,000 particles (out of {cs['N']:,}) for 3D performance.")
         
     # Producing 3D plot
     fig_wind = create_3d_wind_plot(
