@@ -32,7 +32,9 @@ def wind_simulator(live_params, default_params):
     if 'calc_state' not in st.session_state:
         st.session_state['calc_state'] = {'data': None, 'sample_data': None, 'N': 0, **live_params}
 
+    ############################################################################################
     # Sidebar for wind kinematic parameters 
+    ############################################################################################
     st.sidebar.divider()
     with st.sidebar.expander("☄️ &nbsp; Wind Kinematics", expanded=True):
         N = st.number_input("Number of Particles (N)", min_value=1, max_value=200000, step=500, key='N')
@@ -103,11 +105,15 @@ def wind_simulator(live_params, default_params):
         if 'obs_raw' in st.session_state and st.session_state.get('calc_state', {}).get('data') is not None:
             if st.button("Estimate Parameters", type="primary", width='stretch'):
                 with st.spinner("Finding best-fit positions for observations..."):
+                    print ("HLEE")
                     obs_df = estimate_observed_properties(st.session_state['obs_raw'], kin_params, live_params)
                     st.session_state['calc_state']['obs_data'] = obs_df
                     st.rerun()
     
-    
+
+    ############################################################################################
+    # Main area for plots and data display
+    ############################################################################################    
     # Quantities that are calculated and can be plotted
     plot_options = ['l', 'b', 'V_LSR', 'V_GSR', 'd_Sun', 'x', 'y', 'z', 'R', 'theta', 'r', 'phi', 'V_x', 'V_y', 'V_z', 'V_R', 'V_r', 'V_mag']
 
@@ -122,7 +128,7 @@ def wind_simulator(live_params, default_params):
         st.info("Configure kinematics in the sidebar and click 'Calculate model' to generate wind particles.")
     else:
         # Show also models
-        st.subheader(f"🌌 3D Particle Distribution (N={cs['N']})")
+        st.subheader(f"🌌 &nbsp; 3D Particle Distribution (N={cs['N']})")
         if any(cs[k] != live_params[k] for k in live_params):
             st.warning("⚠️ Geometry altered, plotted particles reflect the old configuration. Click 'Calculate model' to sync.")
 
@@ -150,7 +156,6 @@ def wind_simulator(live_params, default_params):
     
     
     # --- 2D SCATTER / HISTOGRAM ---
-
     st.divider()
     st.subheader("📊 &nbsp; Kinematic Analysis Plot")
 
@@ -217,14 +222,18 @@ def wind_simulator(live_params, default_params):
 
 
         # Export Particle data
-        st.divider()
-        st.subheader("💾 &nbsp; Export Particle Data")
+        #st.divider()
+        #st.subheader("💾 &nbsp; Export Particle Data")
         
         filter_active = len(mask_query.strip()) > 0
         if not filter_active:
             st.session_state["export_masked_state"] = False
         
-        export_masked = st.checkbox("Export filtered simulated data", disabled = not filter_active, key="export_masked_state")
+        col1, col2 = st.columns([1, 1])
+
+        with col2:
+            export_masked = st.checkbox("Export filtered simulated data", disabled = not filter_active, key="export_masked_state")
+        
         if export_masked:
             export_df = working_df[plot_options]
             export_filename = "simulated_wind_particles_masked.csv"
@@ -234,14 +243,16 @@ def wind_simulator(live_params, default_params):
 
         csv_data = export_df.to_csv(index=False, float_format='%.3f').encode('utf-8')
 
-        st.download_button(label="💾 &nbsp; Download Data as CSV", \
-                           data=csv_data, file_name=export_filename, mime="text/csv")
+        with col1:
+            st.download_button(label="💾 &nbsp; Download Simulated Data as CSV", \
+                           data=csv_data, file_name=export_filename, mime="text/csv", width='stretch')
 
-        if st.session_state['calc_state'].get('obs_data') is not None:
-            st.download_button(label="💾 &nbsp; Download Derived Observational Data as CSV",
+        #with col2:
+            if st.session_state['calc_state'].get('obs_data') is not None:
+                st.download_button(label="💾 &nbsp; Download Derived Observational Data as CSV",
                                data=st.session_state['calc_state'].get('obs_data').to_csv(index=False, float_format='%.3f').encode('utf-8'),
                                file_name="derived_observational_data.csv",
-                               mime="text/csv")
+                               mime="text/csv", width='stretch')
 
     if plot_df is not None:
         render_2d_analysis_plot(plot_df, cs.get('obs_data'))
