@@ -126,7 +126,7 @@ def create_2d_scatter_plot(working_df, x_col, y_col, c_col, obs_df=None):
 
     # Plot Observations on top in 2D
     if obs_df is not None and not obs_df.empty:
-        fig_2d.add_trace(go.Scattergl(
+        fig_2d.add_trace(go.Scatter(
             x=obs_df[x_col], y=obs_df[y_col],
             mode='markers',
             marker=dict(size=12, color=obs_df[c_col], colorscale='RdBu_r', symbol='diamond', line=dict(color='yellow', width=1.)),
