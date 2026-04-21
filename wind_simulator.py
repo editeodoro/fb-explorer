@@ -1,7 +1,7 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-from model import generate_wind_particles, get_selected_particles
+from model import generate_wind_particles, get_selected_particles, estimate_observed_properties
 from plotting import create_3d_wind_plot, create_2d_scatter_plot, create_2d_histogram
 
 def process_uploaded_config(default_params):
@@ -35,56 +35,95 @@ def wind_simulator(live_params, default_params):
 
     # Sidebar for wind kinematic parameters 
     st.sidebar.divider()
-    st.sidebar.header("☄️ Wind Kinematics")
-    N = st.sidebar.number_input("Number of Particles (N)", min_value=1, max_value=200000, step=500, key='N')
+    with st.sidebar.expander("☄️ &nbsp; Wind Kinematics", expanded=True):
+        N = st.number_input("Number of Particles (N)", min_value=1, max_value=200000, step=500, key='N')
 
-    min_lat = st.sidebar.number_input("Minimum Latitude |b|", min_value=0.0, max_value=90.0, step=1.0, key='min_lat')
-    max_lat = st.sidebar.number_input("Maximum Latitude |b|", min_value=0.0, max_value=90.0, step=10.0, key='max_lat')
+        min_lat = st.number_input("Minimum Latitude |b|", min_value=0.0, max_value=90.0, step=1.0, key='min_lat')
+        max_lat = st.number_input("Maximum Latitude |b|", min_value=0.0, max_value=90.0, step=10.0, key='max_lat')
 
-    if min_lat > max_lat:
-        st.sidebar.error("Minimum latitude cannot be larger than maximum latitude.")
+        if min_lat > max_lat:
+            st.error("Minimum latitude cannot be larger than maximum latitude.")
     
-    distribution_mode = st.sidebar.radio("Particle Distribution", ["Volume Filling", "Edge Confined"], key='distribution_mode')
-    if distribution_mode == "Volume Filling":
-        density_profile = st.sidebar.radio("Density Profile",
-                ["Constant per Volume", "Constant per Z-bin"], key='density_profile')
-    else:
-        density_profile = "N/A"
+        distribution_mode = st.radio("Particle Distribution", ["Volume Filling", "Edge Confined"], key='distribution_mode')
+        if distribution_mode == "Volume Filling":
+            density_profile = st.radio("Density Profile",["Constant per Volume", "Constant per Z-bin"], key='density_profile')
+        else:
+            density_profile = "N/A"
     
-    kinematic_model = st.sidebar.radio("Flow Geometry", ["Radial Outflow", "Ellipsoidal Streamlines"], key='kinematic_model')
-    wind_profile = st.sidebar.radio("Velocity Profile", ["Constant Velocity Wind", "Accelerating Wind"], key='wind_profile')
+        outflow_model = st.radio("Flow Geometry", ["Radial Outflow", "Ellipsoidal Streamlines"], key='outflow_model')
+        wind_profile = st.radio("Velocity Profile", ["Constant Velocity Wind", "Accelerating Wind"], key='wind_profile')
     
-    if wind_profile == "Constant Velocity Wind":
-        calc_v_r_const = st.sidebar.number_input("Constant Radial Velocity", value=default_params['v_r_const'], step=50.0, key='v_r_const')
-        calc_m_slope, calc_v_r_max = 0.0, 0.0
-    else:
-        calc_v_r_const = 0.0
-        calc_m_slope = st.sidebar.number_input("Acceleration Slope", value=default_params['m_slope'], step=10.0, key='m_slope')
-        calc_v_r_max = st.sidebar.number_input("Maximum Velocity", value=default_params['v_r_max'], step=50.0, key='v_r_max')
+        if wind_profile == "Constant Velocity Wind":
+            v_r_const = st.number_input("Constant Radial Velocity", value=default_params['v_r_const'], step=50.0, key='v_r_const')
+            m_slope, v_r_max = 0.0, 0.0
+        else:
+            v_r_const = 0.0
+            m_slope = st.number_input("Acceleration Slope", value=default_params['m_slope'], step=10.0, key='m_slope')
+            v_r_max = st.number_input("Maximum Velocity", value=default_params['v_r_max'], step=50.0, key='v_r_max')
     
-    if st.sidebar.button("Calculate model", type="primary"):
+        kin_params = {'N': N, 'min_lat': min_lat, 'max_lat': max_lat, 'distribution_mode': distribution_mode, 
+                      'density_profile': density_profile, 'outflow_model': outflow_model,
+                      'wind_profile': wind_profile, 'v_r_const': v_r_const, 'm_slope': m_slope, 'v_r_max': v_r_max}
+
+
+    if st.sidebar.button("Calculate model", type="primary", width='stretch'):
         if min_lat <= max_lat:
             with st.spinner("Generating Wind Particles..."):
                 # Calculating model
-                df_wind = generate_wind_particles(N, a, b, c, z0, sun_pos, sun_v_c, wind_profile, calc_v_r_const, calc_m_slope, \
-                                                  calc_v_r_max, min_lat, max_lat, distribution_mode, density_profile, kinematic_model, \
-                                                  polar_angle, az_angle)
-                st.session_state['calc_state'] = {'data': df_wind, 'sample_data': df_wind.sample(min(N, 2000)), 'N': N, **live_params}
+                df_wind = generate_wind_particles(kin_params, live_params)
+                    
+                obs_df = None
+                if 'obs_raw' in st.session_state:
+                    obs_df = estimate_observed_properties(st.session_state['obs_raw'], kin_params, live_params)
+
+                st.session_state['calc_state'] = {
+                    'data': df_wind, 'sample_data': df_wind.sample(min(N, 2000)), 'N': N, 'obs_data': obs_df, **live_params, 'sun_pos': sun_pos }
                 
+    
+    st.sidebar.divider()
+    
+    with st.sidebar.expander("📡 &nbsp; Observations", expanded=False):
+        obs_file = st.file_uploader("Upload Observed Clouds (CSV)", type=["csv"], help="Must contain: l, b, V_LSR")
+    
+        if obs_file:
+            try:
+                obs_raw = pd.read_csv(obs_file)
+                if all(col in obs_raw.columns for col in ['l', 'b', 'V_LSR']):
+                    st.session_state['obs_raw'] = obs_raw
+                    st.success(f"Loaded {len(obs_raw)} observed clouds.")
+                else:
+                    st.error("CSV must contain 'l', 'b', and 'V_LSR'.")
+            except Exception as e:
+                st.error(f"Error parsing file: {e}")
+        else:
+            # Clear observations if no file is uploaded and remove data from plots
+            st.session_state.pop('obs_raw', None) 
+            if 'calc_state' in st.session_state and 'obs_data' in st.session_state['calc_state']:
+                st.session_state['calc_state']['obs_data'] = None
+
+        if 'obs_raw' in st.session_state and st.session_state.get('calc_state', {}).get('data') is not None:
+            if st.button("Estimate Parameters", type="primary"):
+                with st.spinner("Finding best-fit positions for observations..."):
+                    obs_df = estimate_observed_properties(st.session_state['obs_raw'], kin_params, live_params)
+                    st.session_state['calc_state']['obs_data'] = obs_df
+                    st.rerun()
+    
+    
     # Quantities that are calculated and can be plotted
     plot_options = ['l', 'b', 'V_LSR', 'V_GSR', 'd_Sun', 'x', 'y', 'z', 'R', 'theta', 'r', 'phi', 'V_x', 'V_y', 'V_z', 'V_R', 'V_r', 'V_mag']
 
     cs = st.session_state['calc_state']
     plot_df = cs['data']
-    
+        
     # Setting up 3D plot
     if plot_df is None:
         # Model not calculated yet, just showing geometry
-        st.subheader("3D Geometry Preview (No data calculated)")
+        st.subheader("🌌 &nbsp; 3D Geometry Preview (No data calculated)")
         color_col_3d = 'V_LSR' # Fallback for empty plot
+        st.info("Configure kinematics in the sidebar and click 'Calculate model' to generate wind particles.")
     else:
         # Show also models
-        st.subheader(f"3D Particle Distribution (N={cs['N']})")
+        st.subheader(f"🌌 3D Particle Distribution (N={cs['N']})")
         if any(cs[k] != live_params[k] for k in live_params):
             st.warning("⚠️ Geometry altered, plotted particles reflect the old configuration. Click 'Calculate model' to sync.")
 
@@ -107,15 +146,17 @@ def wind_simulator(live_params, default_params):
         st.caption(f"Showing a representative sample of 2,000 particles (out of {cs['N']:,}) for 3D performance.")
         
     # Producing 3D plot
-    fig_wind = create_3d_wind_plot(cs['sample_data'],live_params,sun_pos,color_col_3d,selected_particles_df)
+    fig_wind = create_3d_wind_plot(cs['sample_data'],live_params,sun_pos,color_col_3d,selected_particles_df,cs.get('obs_data'))
     st.plotly_chart(fig_wind, width='stretch')
     
     
     # --- 2D SCATTER / HISTOGRAM ---
+
+    st.divider()
+    st.subheader("📊 &nbsp; Kinematic Analysis Plot")
+
     #@st.fragment
-    def render_2d_analysis_plot(df):
-        st.divider()
-        st.subheader("Kinematic Analysis Plot")
+    def render_2d_analysis_plot(df,obs_df=None):
         working_df = df.copy()
         plot_type = st.radio("Plot Type:", ["Scatter Plot", "Histogram"], horizontal=True)
         
@@ -156,27 +197,35 @@ def wind_simulator(live_params, default_params):
             if abs_x: working_df[x_col] = working_df[x_axis].abs()
             if abs_y: working_df[y_col] = working_df[y_axis].abs()
             if abs_c: working_df[c_col] = working_df[color_var].abs()
+
+            # --- Handle Absolute logic for Observations ---
+            working_obs = cs.get('obs_data')
+            if working_obs is not None and not working_obs.empty:
+                working_obs = working_obs.copy()
+                if abs_x: working_obs[x_col] = working_obs[x_axis].abs()
+                if abs_y: working_obs[y_col] = working_obs[y_axis].abs()
+                if abs_c: working_obs[c_col] = working_obs[color_var].abs()
             
             plot_key = f"scatter_2d_{x_col}_{y_col}"
             
             st.caption("Use the box/lazo tools in the top-right corner to select particles. Selections will be highlighted in the 3D plot.")
             st.plotly_chart(
-                create_2d_scatter_plot(working_df, x_col, y_col, c_col), width='stretch',
+                create_2d_scatter_plot(working_df, x_col, y_col, c_col, working_obs), width='stretch',
                                        on_select="rerun", key=plot_key)
         else:
             if abs_hist: working_df[h_col] = working_df[hist_var].abs()
-            st.plotly_chart(create_2d_histogram(working_df, h_col, bins), width='stretch')
+            st.plotly_chart(create_2d_histogram(working_df, h_col, bins, obs_df), width='stretch')
 
 
         # Export Particle data
         st.divider()
-        st.subheader("Export Particle Data")
+        st.subheader("💾 &nbsp; Export Particle Data")
         
         filter_active = len(mask_query.strip()) > 0
         if not filter_active:
             st.session_state["export_masked_state"] = False
         
-        export_masked = st.checkbox("Export masked data", disabled = not filter_active, key="export_masked_state")
+        export_masked = st.checkbox("Export filtered simulated data", disabled = not filter_active, key="export_masked_state")
         if export_masked:
             export_df = working_df[plot_options]
             export_filename = "simulated_wind_particles_masked.csv"
@@ -184,13 +233,19 @@ def wind_simulator(live_params, default_params):
             export_df = df[plot_options]
             export_filename = "simulated_wind_particles.csv"
 
-        csv_data = export_df.to_csv(index=False, float_format='%.3g').encode('utf-8')
+        csv_data = export_df.to_csv(index=False, float_format='%.3f').encode('utf-8')
 
-        st.download_button(label="💾 Download Data as CSV", \
+        st.download_button(label="💾 &nbsp; Download Data as CSV", \
                            data=csv_data, file_name=export_filename, mime="text/csv")
- 
+
+        if st.session_state['calc_state'].get('obs_data') is not None:
+            st.download_button(label="💾 &nbsp; Download Derived Observational Data as CSV",
+                               data=st.session_state['calc_state'].get('obs_data').to_csv(index=False, float_format='%.3f').encode('utf-8'),
+                               file_name="derived_observational_data.csv",
+                               mime="text/csv")
+
     if plot_df is not None:
-        render_2d_analysis_plot(plot_df)
+        render_2d_analysis_plot(plot_df, cs.get('obs_data'))
     else:
         st.info("Configure kinematics in the sidebar and click 'Calculate model' to generate analysis tools.")
     
@@ -199,9 +254,8 @@ def wind_simulator(live_params, default_params):
     # CONFIG MANAGER
     # ==========================================
     st.sidebar.divider()
-    st.sidebar.header("⚙️ Config Manager")
-    st.sidebar.file_uploader("Import Parameters (.txt)", type=["txt"], key='config_uploader', on_change=process_uploaded_config, args=(default_params,))
-
-    current_params = {k: st.session_state[k] for k in default_params.keys()}
-    export_lines = ["# Fermi Bubble Explorer Parameters", "# Exported Config"] + [f"{k}={v}" for k, v in current_params.items()]
-    st.sidebar.download_button("Export Current Config", data="\n".join(export_lines), file_name="wind_model_parameters.txt", mime="text/plain", width='stretch')
+    with st.sidebar.expander("⚙️ &nbsp; Config Manager", expanded=False):
+        st.file_uploader("Import Parameters (.txt)", type=["txt"], key='config_uploader', on_change=process_uploaded_config, args=(default_params,))
+        current_params = {k: st.session_state[k] for k in default_params.keys()}
+        export_lines = ["# Fermi Bubble Explorer Parameters", "# Exported Config"] + [f"{k}={v}" for k, v in current_params.items()]
+        st.download_button("Export Current Config", data="\n".join(export_lines), file_name="wind_model_parameters.txt", mime="text/plain", width='stretch')

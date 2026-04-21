@@ -29,11 +29,12 @@ for k, v in default_params.items():
 
 # --- SIDEBAR: Simulation mode selector ---
 st.sidebar.title("Simulation Mode")
-mode = st.sidebar.selectbox("Select Mode:", ["Wind Simulator", "LOS Explorer"], index=0)
+mode = st.sidebar.selectbox("Select Mode:", ["Wind Simulator", "LOS Explorer"], index=0, label_visibility="collapsed")
+
+st.sidebar.divider()
 
 # --- SIDEBAR: Common Parameters for bubbles and Sun ---
-st.sidebar.divider()
-with st.sidebar.expander("Bubble Geometry", expanded=False):
+with st.sidebar.expander("🫧 &nbsp; Bubble Geometry", expanded=False):
     a = st.number_input("Vertical Semi-axis (a)", key='a', step=1.0)
     b = st.number_input("Lateral Semi-axis (b)", key='b', step=1.0)
     c = st.number_input("Lateral Semi-axis (c)", key='c', step=1.0)
@@ -41,7 +42,7 @@ with st.sidebar.expander("Bubble Geometry", expanded=False):
     polar_angle = st.number_input("Polar Tilt [deg]", key='polar_angle', step=10.0)
     az_angle = st.number_input("Azimuthal Rotation [deg]", key='az_angle', step=10.0)
 
-with st.sidebar.expander("Observer (Sun)", expanded=False):
+with st.sidebar.expander("☀️ &nbsp; Observer (Sun)", expanded=False):
     sun_x = st.number_input("Sun X [kpc]", key='sun_x', format="%.3f", step=1.0)
     sun_y = st.number_input("Sun Y [kpc]", key='sun_y', format="%.3f", step=1.0)
     sun_z = st.number_input("Sun Z [kpc]", key='sun_z', format="%.3f", step=1.0)

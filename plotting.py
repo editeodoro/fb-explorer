@@ -55,8 +55,8 @@ def get_base_geometry(live_params, sun_pos):
     return fig_base.to_dict()
     
 
-def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR', selected_particles=None):
-    
+def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR', selected_particles=None, obs_df=None):
+
     # 1. Load the pre-calculated base geometry
     base_fig_dict = get_base_geometry(live_params, sun_pos)
     
@@ -91,11 +91,22 @@ def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR', se
                 marker=dict(size=3, color=plot_sample[color_col], colorscale=cscale, colorbar=dict(title=color_col, x=-0.15), opacity=0.8),
                 name='Particles'
             ))
-        
+    
+    # Plot Observations on top in 3D
+    if obs_df is not None and not obs_df.empty:
+        fig_wind.add_trace(go.Scatter3d(
+            x=obs_df['x'], y=obs_df['y'], z=obs_df['z'],
+            mode='markers',
+            marker=dict(size=8, color=obs_df[color_col], colorscale=cscale, symbol='diamond', line=dict(color='yellow', width=4)),
+            name='Observations',
+                hovertext=[f"Model V_LSR: {v:.1f} | Diff: {d:.1f}" for v, d in zip(obs_df.get('V_LSR_mod', []), obs_df.get('V_LSR_diff', []))]
+        ))
+
     return fig_wind
 
 
-def create_2d_scatter_plot(working_df, x_col, y_col, c_col):
+def create_2d_scatter_plot(working_df, x_col, y_col, c_col, obs_df=None):
+
     # Safely inject the pandas index as a real column
     temp_df = working_df.copy()
     temp_df['real_index'] = temp_df.index
@@ -112,16 +123,67 @@ def create_2d_scatter_plot(working_df, x_col, y_col, c_col):
     )
     
     fig_2d.update_traces(marker=dict(size=4, opacity=0.7))
+
+    # Plot Observations on top in 2D
+    if obs_df is not None and not obs_df.empty:
+        fig_2d.add_trace(go.Scattergl(
+            x=obs_df[x_col], y=obs_df[y_col],
+            mode='markers',
+            marker=dict(size=12, color=obs_df[c_col], colorscale='RdBu_r', symbol='diamond', line=dict(color='yellow', width=1.)),
+            name='Observations',
+            hovertext=[f"Model V_LSR: {v:.1f} | Diff: {d:.1f}" for v, d in zip(obs_df.get('V_LSR_mod', []), obs_df.get('V_LSR_diff', []))]
+        ))
+
     fig_2d.update_layout(template="plotly_dark", height=600)
     return fig_2d
 
 
-def create_2d_histogram(working_df, h_col, bins):
-    min_val, max_val = working_df[h_col].min(), working_df[h_col].max()
+def create_2d_histogram(working_df, h_col, bins, obs_df=None):
+    # 1. Find min and max across BOTH datasets to ensure bins cover everything
+    min_val = working_df[h_col].min()
+    max_val = working_df[h_col].max()
+    
+    has_obs = obs_df is not None and not obs_df.empty and h_col in obs_df.columns
+    
+    if has_obs:
+        min_val = min(min_val, obs_df[h_col].min())
+        max_val = max(max_val, obs_df[h_col].max())
+
     bin_size = (max_val - min_val) / bins if max_val > min_val else 1.0
+    
+    # 2. Create the base Simulated histogram
     fig_2d = px.histogram(working_df, x=h_col, color_discrete_sequence=['#00FFFF'])
-    fig_2d.update_traces(xbins=dict(start=min_val, end=max_val, size=bin_size), autobinx=False)
-    fig_2d.update_layout(bargap=0.1, template="plotly_dark", height=600)
+    
+    # Update simulated trace for transparency and name
+    fig_2d.update_traces(
+        xbins=dict(start=min_val, end=max_val, size=bin_size), 
+        autobinx=False,
+        opacity=0.7,         # Transparency 
+        name="Simulated",
+        showlegend=True      # Force legend to show
+    )
+    
+    # 3. Add the Observed histogram on top
+    if has_obs:
+        fig_2d.add_trace(go.Histogram(
+            x=obs_df[h_col],
+            xbins=dict(start=min_val, end=max_val, size=bin_size),
+            autobinx=False,
+            marker_color='yellow', # Matches the yellow diamonds used elsewhere
+            opacity=0.8,           # Slightly more opaque so it stands out
+            name="Observations",
+            showlegend=True
+        ))
+
+    # 4. Set barmode to 'overlay' so they overlap instead of stacking
+    fig_2d.update_layout(
+        barmode='overlay', 
+        bargap=0.1, 
+        template="plotly_dark", 
+        height=600,
+        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01) # Position legend inside plot
+    )
+    
     return fig_2d
 
 
