@@ -27,7 +27,6 @@ def process_uploaded_config(default_params):
 
 def wind_simulator(live_params, default_params):
     
-    a, b, c, z0, polar_angle, az_angle, sun_v_c = (live_params[k] for k in ('a', 'b', 'c', 'z0', 'polar_angle', 'az_angle', 'v_c'))
     sun_pos = np.array([live_params['sun_x'], live_params['sun_y'], live_params['sun_z']])
 
     if 'calc_state' not in st.session_state:
@@ -102,7 +101,7 @@ def wind_simulator(live_params, default_params):
                 st.session_state['calc_state']['obs_data'] = None
 
         if 'obs_raw' in st.session_state and st.session_state.get('calc_state', {}).get('data') is not None:
-            if st.button("Estimate Parameters", type="primary"):
+            if st.button("Estimate Parameters", type="primary", width='stretch'):
                 with st.spinner("Finding best-fit positions for observations..."):
                     obs_df = estimate_observed_properties(st.session_state['obs_raw'], kin_params, live_params)
                     st.session_state['calc_state']['obs_data'] = obs_df
