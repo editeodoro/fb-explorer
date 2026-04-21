@@ -4,7 +4,7 @@ import pandas as pd
 from model import generate_wind_particles, get_selected_particles
 from plotting import create_3d_wind_plot, create_2d_scatter_plot, create_2d_histogram
 
-def process_uploaded_config():
+def process_uploaded_config(default_params):
     
     uploaded_file = st.session_state.get('config_uploader')
     if uploaded_file is not None:
@@ -199,7 +199,7 @@ def wind_simulator(live_params, default_params):
     # ==========================================
     st.sidebar.divider()
     st.sidebar.header("⚙️ Config Manager")
-    st.sidebar.file_uploader("Import Parameters (.txt)", type=["txt"], key='config_uploader', on_change=process_uploaded_config)
+    st.sidebar.file_uploader("Import Parameters (.txt)", type=["txt"], key='config_uploader', on_change=process_uploaded_config, args=(default_params,))
 
     current_params = {k: st.session_state[k] for k in default_params.keys()}
     export_lines = ["# Fermi Bubble Explorer Parameters", "# Exported Config"] + [f"{k}={v}" for k, v in current_params.items()]
