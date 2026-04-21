@@ -159,6 +159,7 @@ def wind_simulator(live_params, default_params):
             
             plot_key = f"scatter_2d_{x_col}_{y_col}"
             
+            st.caption("Use the selection tool in the top-right corner to select particles. Selections will be highlighted in the 3D plot.")
             st.plotly_chart(
                 create_2d_scatter_plot(working_df, x_col, y_col, c_col), width='stretch',
                                        on_select="rerun", key=plot_key)
