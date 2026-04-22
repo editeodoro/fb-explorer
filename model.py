@@ -83,7 +83,8 @@ def _get_advanced_kinematics(x, y, z, formulas, system):
         'x': x, 'y': y, 'z': z,
         'r': r, 'rho': R, 'phi': phi, 'theta': theta,
         'np': np, 'pi': np.pi, 'exp': np.exp, 'sqrt': np.sqrt,
-        'sin': np.sin, 'cos': np.cos, 'tan': np.tan, 'sign' : np.sign
+        'sin': np.sin, 'cos': np.cos, 'tan': np.tan, 'arctan': np.arctan, 'arctan2': np.arctan2, 
+        'arcsin': np.arcsin, 'arccos': np.arccos, 'sign' : np.sign
     }
 
     # --- 2. Evaluate Formulas ---
