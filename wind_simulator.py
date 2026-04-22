@@ -137,7 +137,6 @@ def wind_simulator(live_params, default_params):
         if 'obs_raw' in st.session_state and st.session_state.get('calc_state', {}).get('data') is not None:
             if st.button("Estimate Parameters", type="primary", width='stretch'):
                 with st.spinner("Finding best-fit positions for observations..."):
-                    print ("HLEE")
                     obs_df = estimate_observed_properties(st.session_state['obs_raw'], kin_params, live_params)
                     st.session_state['calc_state']['obs_data'] = obs_df
                     st.rerun()

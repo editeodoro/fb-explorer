@@ -55,6 +55,19 @@ def get_base_geometry(live_params, sun_pos):
     return fig_base.to_dict()
     
 
+def _get_plotting_limits(sample, minimum_range=1):
+    
+    Min, Max = sample.min(), sample.max()
+    
+    # Enforce minimum range to avoid degenerate axes
+    if (Max - Min) < minimum_range:
+        center = minimum_range/2. * (Max + Min)
+        Min, Max = center - minimum_range/2., center + minimum_range/2.
+    
+    return Min, Max
+
+
+
 def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR', selected_particles=None, obs_df=None):
 
     # 1. Load the pre-calculated base geometry
@@ -65,6 +78,8 @@ def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR', se
 
     # 3. Add ONLY the dynamic particles
     if plot_sample is not None:
+        c_min, c_max = _get_plotting_limits(plot_sample[color_col]) if obs_df is None else _get_plotting_limits(obs_df[color_col])
+
         cscale = 'RdBu_r' if 'V_' in color_col else 'Plasma'
         
         if selected_particles is not None and not selected_particles.empty:
@@ -80,7 +95,7 @@ def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR', se
                 marker=dict(
                     size=5, color=selected_particles[color_col], colorscale=cscale,
                     colorbar=dict(title=color_col, x=-0.15), opacity=1.0,
-                    line=dict(color='white', width=1)
+                    line=dict(color='white', width=1), cmin=c_min, cmax=c_max
                 ),
                 name='Selected'
             ))
@@ -88,19 +103,20 @@ def create_3d_wind_plot(plot_sample, live_params, sun_pos, color_col='V_LSR', se
             fig_wind.add_trace(go.Scatter3d(
                 x=plot_sample['x'], y=plot_sample['y'], z=plot_sample['z'],
                 mode='markers',
-                marker=dict(size=3, color=plot_sample[color_col], colorscale=cscale, colorbar=dict(title=color_col, x=-0.15), opacity=0.8),
+                marker=dict(size=3, color=plot_sample[color_col], colorscale=cscale, colorbar=dict(title=color_col, x=-0.15), 
+                            opacity=0.8, cmin=c_min, cmax=c_max), 
                 name='Particles'
             ))
     
-    # Plot Observations on top in 3D
-    if obs_df is not None and not obs_df.empty:
-        fig_wind.add_trace(go.Scatter3d(
-            x=obs_df['x'], y=obs_df['y'], z=obs_df['z'],
-            mode='markers',
-            marker=dict(size=8, color=obs_df[color_col], colorscale=cscale, symbol='diamond', line=dict(color='yellow', width=4)),
-            name='Observations',
-                hovertext=[f"Model V_LSR: {v:.1f} | Diff: {d:.1f}" for v, d in zip(obs_df.get('V_LSR_mod', []), obs_df.get('V_LSR_diff', []))]
-        ))
+        # Plot Observations on top in 3D
+        if obs_df is not None and not obs_df.empty:
+            fig_wind.add_trace(go.Scatter3d(
+                x=obs_df['x'], y=obs_df['y'], z=obs_df['z'],
+                mode='markers',
+                marker=dict(size=8, color=obs_df[color_col], colorscale=cscale, symbol='diamond', line=dict(color='yellow', width=4), cmin=c_min, cmax=c_max),
+                name='Observations',
+                    hovertext=[f"Model V_LSR: {v:.1f} | Diff: {d:.1f}" for v, d in zip(obs_df.get('V_LSR_mod', []), obs_df.get('V_LSR_diff', []))]
+            ))
 
     return fig_wind
 
@@ -111,6 +127,10 @@ def create_2d_scatter_plot(working_df, x_col, y_col, c_col, obs_df=None):
     temp_df = working_df.copy()
     temp_df['real_index'] = temp_df.index
     
+    xlims = _get_plotting_limits(temp_df[x_col])
+    ylims = _get_plotting_limits(temp_df[y_col])
+    c_min, c_max = _get_plotting_limits(temp_df[c_col])
+
     # Passing 'real_index' into custom_data is CRITICAL for the lasso tool to work
     fig_2d = px.scatter(
         temp_df,
@@ -133,23 +153,11 @@ def create_2d_scatter_plot(working_df, x_col, y_col, c_col, obs_df=None):
             name='Observations',
             hovertext=[f"Model V_LSR: {v:.1f} | Diff: {d:.1f}" for v, d in zip(obs_df.get('V_LSR_mod', []), obs_df.get('V_LSR_diff', []))]
         ))
+        c_min, c_max = _get_plotting_limits(obs_df[c_col])
 
-    x_min, x_max = temp_df[x_col].min(), temp_df[x_col].max()
-    y_min, y_max = temp_df[y_col].min(), temp_df[y_col].max()
-
-    # enforce minimum range = 1
-    if (x_max - x_min) < 1:
-        x_center = 0.5 * (x_max + x_min)
-        x_min, x_max = x_center - 0.5, x_center + 0.5
-
-    if (y_max - y_min) < 1:
-        y_center = 0.5 * (y_max + y_min)
-        y_min, y_max = y_center - 0.5, y_center + 0.5
-
-    fig_2d.update_xaxes(range=[x_min, x_max])
-    fig_2d.update_yaxes(range=[y_min, y_max])
-
-    fig_2d.update_layout(template="plotly_dark", height=600)
+    fig_2d.update_xaxes(range=xlims)
+    fig_2d.update_yaxes(range=ylims)
+    fig_2d.update_layout(template="plotly_dark", height=600, coloraxis=dict(cmin=c_min, cmax=c_max))
     return fig_2d
 
 
