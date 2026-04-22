@@ -36,7 +36,7 @@ def wind_simulator(live_params, default_params):
     # Sidebar for wind kinematic parameters 
     ############################################################################################
     st.sidebar.divider()
-    with st.sidebar.expander("☄️ &nbsp; Wind Kinematics", expanded=True):
+    with st.sidebar.expander("☄️ &nbsp; Wind Model", expanded=True):
         N = st.number_input("Number of Particles (N)", min_value=1, max_value=200000, step=500, key='N')
 
         min_lat = st.number_input("Minimum Latitude |b|", min_value=0.0, max_value=90.0, step=1.0, key='min_lat')
@@ -50,22 +50,54 @@ def wind_simulator(live_params, default_params):
             density_profile = st.radio("Density Profile",["Constant per Volume", "Constant per Z-bin"], key='density_profile')
         else:
             density_profile = "N/A"
-    
-        outflow_model = st.radio("Flow Geometry", ["Radial Outflow", "Ellipsoidal Streamlines"], key='outflow_model')
-        wind_profile = st.radio("Velocity Profile", ["Constant Velocity Wind", "Accelerating Wind"], key='wind_profile')
-    
+
+
+        wind_profile = st.radio("Velocity Profile", ["Constant Velocity Wind", "Accelerating Wind", "Advanced Kinematics"], key='wind_profile')
+        
+        v_r_const, m_slope, v_r_max = 0.0, 0.0, 0.0
+        outflow_model, coord_sys, formulas = None, None, None
+
+        if wind_profile != "Advanced Kinematics":
+            outflow_model = st.selectbox("Flow Geometry", ["Radial Outflow", "Ellipsoidal Streamlines"], key='outflow_model')
+
         if wind_profile == "Constant Velocity Wind":
             v_r_const = st.number_input("Constant Radial Velocity [km/s]", value=default_params['v_r_const'], step=50.0, key='v_r_const')
-            m_slope, v_r_max = 0.0, 0.0
-        else:
-            v_r_const = 0.0
+        elif wind_profile == "Accelerating Wind":
             m_slope = st.number_input("Acceleration Slope [km/s/kpc]", value=default_params['m_slope'], step=10.0, key='m_slope')
             v_r_max = st.number_input("Maximum Velocity [km/s]", value=default_params['v_r_max'], step=50.0, key='v_r_max')
-    
-        kin_params = {'N': N, 'min_lat': min_lat, 'max_lat': max_lat, 'distribution_mode': distribution_mode, 
-                      'density_profile': density_profile, 'outflow_model': outflow_model,
-                      'wind_profile': wind_profile, 'v_r_const': v_r_const, 'm_slope': m_slope, 'v_r_max': v_r_max}
+        else:
+            coord_sys = st.selectbox("Coordinate System", ["Cartesian (x,y,z)", "Spherical (r,theta,phi)", "Cylindrical (R,theta,z)"], key='coord_sys')
+            
+            # Defaults for a basic radial expansion
+            if coord_sys == "Cartesian (x,y,z)":
+                fs = ["500*x/r", "500*y/r", "500*z/r"]
+                labels = ["V_x", "V_y", "V_z"]
+            elif coord_sys == "Spherical (r,theta,phi)":
+                fs = ["500", "0", "0"]
+                labels = ["V_r", "V_theta", "V_phi"]
+            else: # Cylindrical
+                fs = ["500*R/r", "0", "500*z/r"]
+                labels = ["V_R", "V_theta", "V_z"]
 
+            formulas = []
+            for i in range(3):
+               
+                col1, col2 = st.columns([1, 2], vertical_alignment="center")
+                with col1: 
+                    st.text(f"{labels[i]} = ")
+                with col2: 
+                    formulas.append(st.text_input(f" ", value=fs[i], label_visibility="collapsed", key=f"formula_{coord_sys}_{i}"))
+
+                if not formulas[i].strip():
+                    formulas[i] = "0"
+                if 'R' in formulas[i]:
+                    formulas[i] = formulas[i].replace('R', 'rho')
+
+
+        kin_params = {'N': N, 'min_lat': min_lat, 'max_lat': max_lat, 'distribution_mode': distribution_mode, 
+                      'density_profile': density_profile, 'outflow_model': outflow_model, 'coord_sys': coord_sys, 'formulas': formulas,
+                      'wind_profile': wind_profile, 'v_r_const': v_r_const, 'm_slope': m_slope, 'v_r_max': v_r_max}
+                    
 
     if st.sidebar.button("Calculate model", type="primary", width='stretch'):
         if min_lat <= max_lat:
@@ -115,7 +147,8 @@ def wind_simulator(live_params, default_params):
     # Main area for plots and data display
     ############################################################################################    
     # Quantities that are calculated and can be plotted
-    plot_options = ['l', 'b', 'V_LSR', 'V_GSR', 'd_Sun', 'x', 'y', 'z', 'R', 'theta', 'r', 'phi', 'V_x', 'V_y', 'V_z', 'V_R', 'V_r', 'V_mag']
+    plot_options = ['l', 'b', 'V_LSR', 'V_GSR', 'd_Sun', 'x', 'y', 'z', 'R', 'theta', 'r', 'phi', 
+                    'V_x', 'V_y', 'V_z', 'V_R', 'V_r', 'V_theta', 'V_phi', 'V_mag']
 
     cs = st.session_state['calc_state']
     plot_df = cs['data']

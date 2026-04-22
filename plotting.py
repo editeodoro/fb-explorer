@@ -134,6 +134,21 @@ def create_2d_scatter_plot(working_df, x_col, y_col, c_col, obs_df=None):
             hovertext=[f"Model V_LSR: {v:.1f} | Diff: {d:.1f}" for v, d in zip(obs_df.get('V_LSR_mod', []), obs_df.get('V_LSR_diff', []))]
         ))
 
+    x_min, x_max = temp_df[x_col].min(), temp_df[x_col].max()
+    y_min, y_max = temp_df[y_col].min(), temp_df[y_col].max()
+
+    # enforce minimum range = 1
+    if (x_max - x_min) < 1:
+        x_center = 0.5 * (x_max + x_min)
+        x_min, x_max = x_center - 0.5, x_center + 0.5
+
+    if (y_max - y_min) < 1:
+        y_center = 0.5 * (y_max + y_min)
+        y_min, y_max = y_center - 0.5, y_center + 0.5
+
+    fig_2d.update_xaxes(range=[x_min, x_max])
+    fig_2d.update_yaxes(range=[y_min, y_max])
+
     fig_2d.update_layout(template="plotly_dark", height=600)
     return fig_2d
 

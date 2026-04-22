@@ -6,6 +6,43 @@ from geometry import apply_rotation, calculate_intersections
 # =========================================================================
 # SHARED PHYSICS ENGINE
 # =========================================================================
+def _get_cylindrical_spherical(x,y,z,Vx,Vy,Vz):
+
+    R = np.sqrt(x**2 + y**2)
+    r = np.sqrt(x**2 + y**2 + z**2)
+    R_safe = np.maximum(R, 1e-9)
+    theta_deg = np.degrees(np.arctan2(y, x))
+    r_safe = np.maximum(r, 1e-9)
+    phi_deg = np.degrees(np.arccos(z / r_safe))
+    
+    V_R = (x * Vx + y * Vy) / R_safe
+    V_r = (x * Vx + y * Vy + z * Vz) / r_safe
+    
+    V_theta = (-y * Vx + x * Vy) / R_safe
+    V_phi = (z * (x * Vx + y * Vy) - R_safe**2 * Vz) / (R_safe * r_safe)
+
+    return R, r, theta_deg, phi_deg, V_R, V_r, V_theta, V_phi
+
+
+def _get_observables(x,y,z,Vx,Vy,Vz,sun_pos, sun_v_c):
+
+    particles = np.vstack((x, y, z)).T
+    d_vec = particles - sun_pos
+    d_Sun = np.linalg.norm(d_vec, axis=1)
+    v_gsr = np.sum(np.vstack((Vx, Vy, Vz)).T * (d_vec / d_Sun[:, np.newaxis]), axis=1)
+    
+    l_rad = np.arctan2(d_vec[:,1], d_vec[:,0])
+    b_rad = np.arcsin(np.clip(d_vec[:,2] / np.maximum(d_Sun, 1e-9), -1.0, 1.0))
+    
+    l_deg = ((np.degrees(l_rad) + 180) % 360) - 180
+    b_deg = np.degrees(b_rad)
+    v_lsr = v_gsr - (sun_v_c * np.sin(l_rad) * np.cos(b_rad))
+
+    return l_deg, b_deg, v_lsr, v_gsr, d_Sun
+
+
+
+
 def _get_kinematics(x_b, y_b, z_b, a, b, c, z0, kin_params):
     """Calculates the velocity vector for any point in the unrotated frame."""
     r = np.sqrt(x_b**2 + y_b**2 + z_b**2)
@@ -34,6 +71,53 @@ def _get_kinematics(x_b, y_b, z_b, a, b, c, z0, kin_params):
     return Vx_b, Vy_b, Vz_b, V_mag
 
 
+def _get_advanced_kinematics(x, y, z, formulas, system):
+    # --- 1. Prepare All Coordinates ---
+    r = np.sqrt(x**2 + y**2 + z**2)
+    R = np.sqrt(x**2 + y**2)
+    theta = np.arctan2(y, x)            # Azimuthal
+    phi = np.arccos(np.clip(z/r, -1, 1))  # Polar (0 at North Pole)
+    
+    # Dictionary of everything the user might type
+    context = {
+        'x': x, 'y': y, 'z': z,
+        'r': r, 'rho': R, 'phi': phi, 'theta': theta,
+        'np': np, 'pi': np.pi, 'exp': np.exp, 'sqrt': np.sqrt,
+        'sin': np.sin, 'cos': np.cos, 'tan': np.tan
+    }
+
+    # --- 2. Evaluate Formulas ---
+    try:
+        v1 = eval(formulas[0], {"__builtins__": {}}, context)
+        v2 = eval(formulas[1], {"__builtins__": {}}, context)
+        v3 = eval(formulas[2], {"__builtins__": {}}, context)
+        v1 = np.full_like(x, v1) if np.isscalar(v1) else v1
+        v2 = np.full_like(x, v2) if np.isscalar(v2) else v2
+        v3 = np.full_like(x, v3) if np.isscalar(v3) else v3
+    except Exception as e:
+        print (e)
+        st.error(f"Math Error: {e}")
+        return np.zeros_like(x), np.zeros_like(y), np.zeros_like(z), np.zeros_like(x)
+
+    # --- 3. Convert back to Cartesian (Vx, Vy, Vz) ---
+    if system == "Cartesian (x,y,z)":
+        vx = v1 
+        vy = v2 
+        vz = v3
+    elif system == "Spherical (r,theta,phi)":
+        # Standard Spherical -> Cartesian velocity transformation
+        vx = v1*np.sin(phi)*np.cos(theta) + v2*np.cos(phi)*np.cos(theta) - v3*np.sin(theta)
+        vy = v1*np.sin(phi)*np.sin(theta) + v2*np.cos(phi)*np.sin(theta) + v3*np.cos(theta)
+        vz = v1*np.cos(phi) - v2*np.sin(phi)
+    elif system == "Cylindrical (R,theta,z)":
+        # Cylindrical -> Cartesian velocity transformation
+        vx = v1*np.cos(theta) - v2*np.sin(theta)
+        vy = v1*np.sin(theta) + v2*np.cos(theta)
+        vz = v3
+    
+    vmag = np.sqrt(vx**2 + vy**2 + vz**2)
+    return vx, vy, vz, vmag
+    
 # =========================================================================
 # PRIMARY FUNCTIONS
 # =========================================================================
@@ -111,33 +195,21 @@ def generate_wind_particles(kin_params, live_params):
     particles_b = np.array(particles_b)
     x_b, y_b, z_b = particles_b[:,0], particles_b[:,1], particles_b[:,2]
     
-    Vx_b, Vy_b, Vz_b, V_mag = _get_kinematics(x_b, y_b, z_b, a, b, c, z0, kin_params)
-    
     x, y, z = apply_rotation(x_b, y_b, z_b, polar_angle, az_angle)
-    Vx, Vy, Vz = apply_rotation(Vx_b, Vy_b, Vz_b, polar_angle, az_angle)
+
+    if kin_params['wind_profile'] == "Advanced Kinematics":
+        Vx, Vy, Vz, V_mag = _get_advanced_kinematics(x, y, z, kin_params['formulas'], kin_params['coord_sys'])
+    else:
+        Vx_b, Vy_b, Vz_b, V_mag = _get_kinematics(x_b, y_b, z_b, a, b, c, z0, kin_params)
+        Vx, Vy, Vz = apply_rotation(Vx_b, Vy_b, Vz_b, polar_angle, az_angle)
     
-    particles = np.vstack((x, y, z)).T
-    R_safe = np.maximum(np.sqrt(x**2 + y**2), 1e-9)
-    theta_deg = np.degrees(np.arctan2(y, x))
-    phi_deg = np.degrees(np.arccos(z / np.maximum(np.sqrt(x**2 + y**2 + z**2), 1e-9)))
-    
-    V_R = (x * Vx + y * Vy) / R_safe
-    V_r = (x * Vx + y * Vy + z * Vz) / np.maximum(np.sqrt(x**2 + y**2 + z**2), 1e-9)
-    
-    d_vec = particles - sun_pos
-    d = np.linalg.norm(d_vec, axis=1)
-    v_gsr = np.sum(np.vstack((Vx, Vy, Vz)).T * (d_vec / d[:, np.newaxis]), axis=1)
-    
-    l_rad = np.arctan2(d_vec[:,1], d_vec[:,0])
-    b_rad = np.arcsin(np.clip(d_vec[:,2] / np.maximum(d, 1e-9), -1.0, 1.0))
-    
-    l_deg = ((np.degrees(l_rad) + 180) % 360) - 180
-    v_lsr = v_gsr - (sun_v_c * np.sin(l_rad) * np.cos(b_rad))
+    R, r, theta_deg, phi_deg, V_R, V_r, V_theta, V_phi = _get_cylindrical_spherical(x, y, z, Vx, Vy, Vz)
+    l_deg, b_deg, v_lsr, v_gsr, d_Sun = _get_observables(x, y, z, Vx, Vy, Vz, sun_pos, sun_v_c)
     
     return pd.DataFrame({
-        'l': l_deg, 'b': np.degrees(b_rad), 'V_LSR': v_lsr, 'V_GSR': v_gsr, 'd_Sun': d,
-        'x': x, 'y': y, 'z': z, 'R': np.sqrt(x**2 + y**2), 'theta': theta_deg, 'r': np.sqrt(x**2 + y**2 + z**2), 'phi': phi_deg,
-        'V_x': Vx, 'V_y': Vy, 'V_z': Vz, 'V_R': V_R, 'V_r': V_r, 'V_mag': V_mag
+        'l': l_deg, 'b': b_deg, 'V_LSR': v_lsr, 'V_GSR': v_gsr, 'd_Sun': d_Sun,
+        'x': x, 'y': y, 'z': z, 'R': R, 'theta': theta_deg, 'r': r, 'phi': phi_deg,
+        'V_x': Vx, 'V_y': Vy, 'V_z': Vz, 'V_R': V_R, 'V_r': V_r, 'V_theta': V_theta, 'V_phi': V_phi, 'V_mag': V_mag
     })
 
 
@@ -159,8 +231,6 @@ def estimate_observed_properties(obs_df, kin_params, live_params):
         
         if len(all_i) < 2: continue
             
-        # FIX: Sample the entire continuous bounds from first entry to last exit 
-        # This prevents the estimator from missing the overlap region!
         s_vals = np.linspace(all_i[0][0], all_i[-1][0], 250)
         
         pts = sun_pos + s_vals[:, np.newaxis] * d_vec
@@ -168,18 +238,15 @@ def estimate_observed_properties(obs_df, kin_params, live_params):
         
         x_b, y_b, z_b = apply_rotation(x, y, z, p_deg, a_deg, inverse=True)
         
-        # --- SHARED KINEMATICS HOOK ---
-        Vx_b, Vy_b, Vz_b, V_mag = _get_kinematics(x_b, y_b, z_b, a, b, c, z0, kin_params)
+        if kin_params['wind_profile'] == "Advanced Kinematics":
+            Vx, Vy, Vz, V_mag = _get_advanced_kinematics(x, y, z, kin_params['formulas'], kin_params['coord_sys'])
+        else:
+            Vx_b, Vy_b, Vz_b, V_mag = _get_kinematics(x_b, y_b, z_b, a, b, c, z0, kin_params)
+            Vx, Vy, Vz = apply_rotation(Vx_b, Vy_b, Vz_b, p_deg, a_deg)
+
         
-        Vx, Vy, Vz = apply_rotation(Vx_b, Vy_b, Vz_b, p_deg, a_deg)
-        
-        R_safe = np.maximum(np.sqrt(x**2 + y**2), 1e-9)
-        theta_deg = np.degrees(np.arctan2(y, x))
-        phi_deg = np.degrees(np.arccos(z / np.maximum(np.sqrt(x**2 + y**2 + z**2), 1e-9)))
-        
-        V_R = (x * Vx + y * Vy) / R_safe
-        V_r = (x * Vx + y * Vy + z * Vz) / np.maximum(np.sqrt(x**2 + y**2 + z**2), 1e-9)
-        
+        R, r, theta_deg, phi_deg, V_R, V_r, V_theta, V_phi = _get_cylindrical_spherical(x, y, z, Vx, Vy, Vz)
+
         d_vec_est = pts - sun_pos
         d_est = np.linalg.norm(d_vec_est, axis=1)
         v_gsr = np.sum(np.vstack((Vx, Vy, Vz)).T * (d_vec_est / d_est[:, np.newaxis]), axis=1)
@@ -193,10 +260,10 @@ def estimate_observed_properties(obs_df, kin_params, live_params):
         
         results.append({
             'l': l_deg, 'b': b_deg, 'V_LSR': v_obs, 'V_LSR_mod': v_lsr[best_idx], 'V_GSR' : v_gsr_obs, 'V_GSR_mod': v_gsr[best_idx], 
-            'd_Sun': d_est[best_idx], 'x': x[best_idx], 'y': y[best_idx], 'z': z[best_idx], 'R': np.sqrt(x[best_idx]**2 + y[best_idx]**2), 
-            'theta': theta_deg[best_idx], 'r': np.sqrt(x[best_idx]**2 + y[best_idx]**2 + z[best_idx]**2), 'phi': phi_deg[best_idx],
-            'V_x': Vx[best_idx], 'V_y': Vy[best_idx], 'V_z': Vz[best_idx],
-            'V_R': V_R[best_idx], 'V_r': V_r[best_idx], 'V_mag': V_mag[best_idx], 'V_LSR_diff': diffs[best_idx]
+            'd_Sun': d_est[best_idx], 'x': x[best_idx], 'y': y[best_idx], 'z': z[best_idx], 'R': R[best_idx], 
+            'theta': theta_deg[best_idx], 'r': r[best_idx], 'phi': phi_deg[best_idx], 'V_x': Vx[best_idx], 'V_y': Vy[best_idx], 
+            'V_z': Vz[best_idx], 'V_R': V_R[best_idx], 'V_r': V_r[best_idx], 'V_theta': V_theta[best_idx], 
+            'V_phi': V_phi[best_idx], 'V_mag': V_mag[best_idx], 'V_LSR_diff': diffs[best_idx]
         })
         
     return pd.DataFrame(results) if results else pd.DataFrame()
