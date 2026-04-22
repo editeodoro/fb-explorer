@@ -83,7 +83,7 @@ def _get_advanced_kinematics(x, y, z, formulas, system):
         'x': x, 'y': y, 'z': z,
         'r': r, 'rho': R, 'phi': phi, 'theta': theta,
         'np': np, 'pi': np.pi, 'exp': np.exp, 'sqrt': np.sqrt,
-        'sin': np.sin, 'cos': np.cos, 'tan': np.tan
+        'sin': np.sin, 'cos': np.cos, 'tan': np.tan, 'sign' : np.sign
     }
 
     # --- 2. Evaluate Formulas ---
@@ -273,19 +273,14 @@ def get_selected_particles(sample_df, state):
     
     selected_particles_df = None
 
-    if not state:
-        return None
+    if not state: return None
 
     # --- Extract points ---
-    if hasattr(state, "selection"):
-        points = state.selection.get("points", [])
-    elif isinstance(state, dict):
-        points = state.get("selection", {}).get("points", [])
-    else:
-        points = []
+    if hasattr(state, "selection"): points = state.selection.get("points", [])
+    elif isinstance(state, dict): points = state.get("selection", {}).get("points", [])
+    else: points = []
 
-    if not points:
-        return None
+    if not points: return None
 
     try:
         selected_real_indices = []
