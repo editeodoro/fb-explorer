@@ -55,12 +55,12 @@ def wind_simulator(live_params, default_params):
         wind_profile = st.radio("Velocity Profile", ["Constant Velocity Wind", "Accelerating Wind"], key='wind_profile')
     
         if wind_profile == "Constant Velocity Wind":
-            v_r_const = st.number_input("Constant Radial Velocity", value=default_params['v_r_const'], step=50.0, key='v_r_const')
+            v_r_const = st.number_input("Constant Radial Velocity [km/s]", value=default_params['v_r_const'], step=50.0, key='v_r_const')
             m_slope, v_r_max = 0.0, 0.0
         else:
             v_r_const = 0.0
-            m_slope = st.number_input("Acceleration Slope", value=default_params['m_slope'], step=10.0, key='m_slope')
-            v_r_max = st.number_input("Maximum Velocity", value=default_params['v_r_max'], step=50.0, key='v_r_max')
+            m_slope = st.number_input("Acceleration Slope [km/s/kpc]", value=default_params['m_slope'], step=10.0, key='m_slope')
+            v_r_max = st.number_input("Maximum Velocity [km/s]", value=default_params['v_r_max'], step=50.0, key='v_r_max')
     
         kin_params = {'N': N, 'min_lat': min_lat, 'max_lat': max_lat, 'distribution_mode': distribution_mode, 
                       'density_profile': density_profile, 'outflow_model': outflow_model,

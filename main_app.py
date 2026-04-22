@@ -46,7 +46,7 @@ with st.sidebar.expander("☀️ &nbsp; Observer (Sun)", expanded=False):
     sun_x = st.number_input("Sun X [kpc]", key='sun_x', format="%.3f", step=1.0)
     sun_y = st.number_input("Sun Y [kpc]", key='sun_y', format="%.3f", step=1.0)
     sun_z = st.number_input("Sun Z [kpc]", key='sun_z', format="%.3f", step=1.0)
-    sun_v_c = st.number_input("Sun Circular Velocity (km/s)", key='v_c', step=10)
+    sun_v_c = st.number_input("Sun Circular Velocity [km/s]", key='v_c', step=10)
     sun_pos = np.array([sun_x, sun_y, sun_z])
 
 live_params = {'a': a, 'b': b, 'c': c, 'z0': z0, 'polar_angle': polar_angle, 'az_angle': az_angle, \
