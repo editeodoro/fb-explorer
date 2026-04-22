@@ -20,7 +20,10 @@ default_params = {
     'density_profile': "Constant per Volume", 
     'kinematic_model': "Radial Outflow",
     'wind_profile': "Constant Velocity Wind", 'v_r_const': 500.0,
-    'm_slope': 125.0, 'v_r_max': 500.0, 'v_c': 240.0, 'min_lat': 0.0, 'max_lat': 90.0
+    'm_slope': 125.0, 'v_r_max': 500.0, 'v_c': 240.0, 'min_lat': 0.0, 'max_lat': 90.0,
+    'V1_CAR': "500*x/r", 'V2_CAR': "500*y/r", 'V3_CAR': "500*z/r",
+    'V1_SPH': '500', 'V2_SPH': '0', 'V3_SPH': '0',
+    'V1_CYL': "500*x/r", 'V2_CYL': "500*y/r", 'V3_CYL': "500*z/r"
 }
 
 for k, v in default_params.items():

@@ -66,7 +66,8 @@ def wind_simulator(live_params, default_params):
             m_slope = st.number_input("Acceleration Slope [km/s/kpc]", value=default_params['m_slope'], step=10.0, key='m_slope')
             v_r_max = st.number_input("Maximum Velocity [km/s]", value=default_params['v_r_max'], step=50.0, key='v_r_max')
         else:
-            coord_sys = st.selectbox("Coordinate System", ["Cartesian (x,y,z)", "Spherical (r,theta,phi)", "Cylindrical (R,theta,z)"], key='coord_sys')
+            coord_sys = st.selectbox("Coordinate System", ["Cartesian (x,y,z)", "Spherical (r,theta,phi)", "Cylindrical (R,theta,z)"], key='coord_sys',
+                                     help="Define velocity components. Most numpy functions and the variables x,y,z,r,theta,phi,R are available.")
             
             # Defaults for a basic radial expansion
             if coord_sys == "Cartesian (x,y,z)":
@@ -86,7 +87,7 @@ def wind_simulator(live_params, default_params):
                 with col1: 
                     st.text(f"{labels[i]} = ")
                 with col2: 
-                    formulas.append(st.text_input(f" ", value=fs[i], label_visibility="collapsed", key=f"formula_{coord_sys}_{i}"))
+                    formulas.append(st.text_input(f" ", value=fs[i], label_visibility="collapsed", key=f"V{i+1}_{coord_sys[0:3].upper()}"))
 
                 if not formulas[i].strip():
                     formulas[i] = "0"
